@@ -4,7 +4,7 @@ A combination of traditional optimal control & reinforcement learning
 
 - MPC based 
 
-  ![image-20200702134757530](/Users/jiqiandong/Desktop/OneDrive - purdue.edu/work2/image-20200702134757530.png)
+  ![image-20200702134757530](./image-20200702134757530.png)
 
   
 
