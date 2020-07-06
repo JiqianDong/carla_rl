@@ -28,13 +28,15 @@ except IndexError:
     pass
 
 import carla
-
 import pygame
+import numpy as np
+
+import gym
+from gym.spaces.box import Box
+from gym.spaces import Discrete, Tu
+
 
 from utils import World, HUD
-import gym
-
-
 
 class CarlaEnv(object):
     '''
@@ -44,81 +46,108 @@ class CarlaEnv(object):
     def __init__(self,
                  host='127.0.0.1',
                  port=2000,
-                 city_name='Town03'):
+                 city_name='Town03',
+                 render_pygame=True):
         self.client = carla.Client(host,port)
         self.client.set_timeout(2.0)
 
-
         self.hud = HUD(1700,1000)
         self.world = World(self.client.get_world(), self.hud)
-        # self.world = World(self.client.load_world(city_name), self.hud)
-                
+        self.render_pygame = render_pygame
+
+        self.timestep = 0
+
+
+
 
     @staticmethod
     def action_space(self):
-        pass
+        throttle_brake = Discrete(3)  # -1 brake, 0 keep, 1 throttle
+        steering = Discrete(3)
+        return Tuple([throttle_brake,steering])
 
     @staticmethod
     def state_space(self):
-        pass
+        N = len(self.world.vehicles)
+        F = 6 # FIXME not hard code
+        return Box(low=-np.inf, high=np.inf, shape=(N,F), dtype=np.float32)
 
     def reset(self):
+        # reset the render display panel
+        if self.render_pygame:
+            self.display = pygame.display.set_mode((1700,1000)),
+            pygame.HWSURFACE | pygame.DOUBLEBUF)
+            
         self.world.destroy()
         self.world.restart()
 
 
+        time.sleep(0.001)
+        self.timestep = 0
+
+        return self.get_state()
+
+
     def step(self,rl_actions):
-        throttle = rl_actions['throttle']
         
+        self.world.cav_controller.step(rl_actions)
+        self.world.ldhv_controller.step()
+        self.world.bhdv_controller.step()
+
+        state = self.get_state() #next observation
+
+        collision = self.check_collision()
+        done = False
+        if collision:
+            print(collision)
+            done = True
+
+        reward = self.compute_reward(collision)
+
+        self.timestep += 1 
+        infos = {}
+
+        if self.render_pygame:
+            self.render_frame()
+
+        return state, reward, done, infos
+
+    def render_frame(self):
+        if self.display:
+            self.world.render(self.display)
+            pygame.display.flip()
+        else:
+            raise Exception("No display to render")
+
+    def check_collision(self):
+        if len(self.world.collision_sensor.history)>0:
+            return self.world.collision_sensor.history[-1]
+        else:
+            return None
+
+    def get_state(self):
+        states = []
+        for vel in self.world.vehicles:
+            state = []
+            location = veh.get_location()
+            state += [location.x, location.y]
+
+            speed = veh.get_velocity()
+            state += [speed.x, speed.y]
+
+            accel = veh.get_acceleration()
+            state += [accel.x, accel.y]
+            states.append(np.array(state))
+        return np.array(states)
+
+    def compute_reward(self,collision=None):
+
+        weight_collision = 1
+        base_reward = 0
 
 
+        collision_penalty = 0
+        if collision:
+            collision_penalty = collision[1] # the negative intensity of collision
 
-
-
-def main(num_runs):
-    quit_flag = False
-    try:
-        pygame.init()
-        pygame.font.init()
-        env = CarlaEnv()
-
-        max_steps = 1000
-
-
-        display = pygame.display.set_mode(
-            (1700, 1000),
-            pygame.HWSURFACE | pygame.DOUBLEBUF)
-        clock = pygame.time.Clock()
-        for _ in range(num_runs):
-
-            for timestep in range(max_steps):
-                clock.tick_busy_loop(60)
-
-
-                # check quit
-                # for event in pygame.event.get():
-                #     if event.type == pygame.QUIT:
-                #         quit_flag = True
-
-                env.world.tick(clock)
-
-
-                env.world.render(display)
-                pygame.display.flip()
-
-                if quit_flag:
-                    return
-            print("done in : ", timestep)
-            env.reset()
-
-    finally:
-
-        if env.world is not None:
-            env.world.destroy()
-
-        pygame.quit()
-
-
-
-if __name__ == '__main__':
-    main(num_runs = 3)
+        return base_reward - collision_penalty*weight_collision

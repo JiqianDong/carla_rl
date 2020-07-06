@@ -27,6 +27,8 @@ import carla
 from carla import ColorConverter as cc
 import pygame
 
+from .controller import *
+
 def find_weather_presets():
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
     name = lambda x: ' '.join(m.group(0) for m in rgx.finditer(x))
@@ -48,7 +50,7 @@ class World(object):
         self.FHDV = None
         self.BHDV = None
 
-        self.players = None
+        self.vehicles = None
 
         self.collision_sensor = None
         self.lane_invasion_sensor = None
@@ -65,12 +67,12 @@ class World(object):
         self.setup_vehicles()
         # Set up the sensors.
         self.setup_sensors()
+        self.setup_controllers()
 
     def setup_vehicles(self):
         cav_loc = 1
         hdv_loc = 2
         bhdv_init_speed = 22
-
 
         # hdv_loc = 3
         # cav_loc = 4
@@ -94,7 +96,6 @@ class World(object):
         CAV_spawn_point = self.world.get_map().get_spawn_points()[cav_loc]#random.choice(spawn_points) if spawn_points else carla.Transform()
         CAV_spawn_point.location.x -= loc_diff
         # print("CAV",CAV_spawn_point.location)
-        
 
         FHDV_spawn_point = self.world.get_map().get_spawn_points()[hdv_loc]
         FHDV_spawn_point.location.x += headway_2
@@ -110,9 +111,9 @@ class World(object):
         self.BHDV = self.world.try_spawn_actor(get_blueprint("BHDV",'mustang','128,128,128'), BHDV_spawn_point) #not connected
         # self.BHDV = self.world.try_spawn_actor(get_blueprint("BHDV",'mustang','51,51,255'), BHDV_spawn_point)
 
-        self.players = [self.CAV, self.LHDV, self.FHDV, self.BHDV]
+        self.vehicles = [self.CAV, self.LHDV, self.FHDV, self.BHDV]
 
-        for i in self.players:
+        for i in self.vehicles:
             i.set_velocity(carla.Vector3D(x=speed))
         self.BHDV.set_velocity(carla.Vector3D(x=bhdv_init_speed))
 
@@ -130,6 +131,12 @@ class World(object):
         actor_type = get_actor_display_name(self.CAV)
         self.hud.notification(actor_type)
 
+    def setup_controllers(self):
+        self.cav_controller = CAV_controller(self.CAV)
+        self.ldhv_controller = LHDV_controller(self.LHDV)
+        self.bhdv_controller = controller(self.BHDV, True)
+        
+
     def next_weather(self, reverse=False):
         self._weather_index += -1 if reverse else 1
         self._weather_index %= len(self._weather_presets)
@@ -145,15 +152,17 @@ class World(object):
         self.hud.render(display)
 
     def destroy(self):
+        if not self.vehicles:
+            return 
+    
         actors = [
             self.camera_manager.sensor,
             self.collision_sensor.sensor,
             self.lane_invasion_sensor.sensor,
-            self.gnss_sensor.sensor] + self.players
+            self.gnss_sensor.sensor] + self.vehicles
         for actor in actors:
             if actor is not None:
                 actor.destroy()
-
 
 
 
