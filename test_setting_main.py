@@ -71,7 +71,7 @@ def main(num_runs):
         pygame.quit()
 
 if __name__ == '__main__':
-    main(num_runs = 3)
+    main(num_runs = 10)
     
     
     
