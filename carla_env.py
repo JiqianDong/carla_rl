@@ -79,7 +79,6 @@ class CarlaEnv(object):
         self.world.destroy()
         self.world.restart()
 
-
         time.sleep(0.001)
         self.timestep = 0
 
@@ -136,14 +135,14 @@ class CarlaEnv(object):
             accel = veh.get_acceleration()
             state += [accel.x, accel.y]
             states.append(np.array(state))
-        return np.array(states)
+        states = np.array(states)
+        # print(state.shape)
+        return states
 
     def compute_reward(self,collision=None):
 
         weight_collision = 1
         base_reward = 0
-
-
         collision_penalty = 0
         if collision:
             collision_penalty = collision[1] # the negative intensity of collision
