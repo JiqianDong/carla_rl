@@ -27,7 +27,7 @@ import carla
 from carla import ColorConverter as cc
 import pygame
 
-from .controller import *
+from controller import *
 
 def find_weather_presets():
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
