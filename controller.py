@@ -83,9 +83,12 @@ class LHDV_controller(controller):
 
     def step(self,decisions=None):
         self.timestep += 1
-        decisions = self.command_list[self.timestep]
-        dec = self.process(decisions)
-        self.apply(dec)
+        if self.timestep < len(self.command_list) - 1:
+            decisions = self.command_list[self.timestep]
+            dec = self.process(decisions)
+            self.apply(dec)
+        else:
+            return 
         
 
 

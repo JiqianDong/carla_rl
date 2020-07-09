@@ -21,7 +21,7 @@ def main(num_runs):
     
     RENDER = True
     TEST_SETTINGS = True
-    MAX_STEPS_PER_EPISODE = 1000
+    MAX_STEPS_PER_EPISODE = 300
     
     try:
         quit_flag = False
