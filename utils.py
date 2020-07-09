@@ -50,6 +50,8 @@ class World(object):
         self.FHDV = None
         self.BHDV = None
 
+        self.LHDV_FLAGS = None   # control LHDV is at left 0 or right 1      
+
         self.vehicles = None
 
         self.collision_sensor = None
@@ -59,17 +61,20 @@ class World(object):
         self._weather_presets = find_weather_presets()
         self._weather_index = 0
 
-        self.restart()
+        self.restart()  
         self.world.on_tick(hud.on_world_tick)
 
     def restart(self):
         # Set up vehicles
+        self.LHDV_FLAGS = random.choice([0,1])
         self.setup_vehicles()
         # Set up the sensors.
         self.setup_sensors()
         self.setup_controllers()
 
     def setup_vehicles(self):
+
+
         cav_loc = 1
         hdv_loc = 2
         bhdv_init_speed = 22
@@ -132,7 +137,8 @@ class World(object):
         self.hud.notification(actor_type)
 
     def setup_controllers(self):
-        self.cav_controller = CAV_controller(self.CAV)
+        self.cav_controller = controller(self.CAV, True)
+        # self.cav_controller = CAV_controller(self.CAV)
         self.ldhv_controller = LHDV_controller(self.LHDV)
         self.bhdv_controller = controller(self.BHDV, True)
         
