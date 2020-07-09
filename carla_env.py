@@ -19,13 +19,13 @@ import numpy as np
 import sys
 import glob
 
-try:
-    sys.path.append(glob.glob('../../carla/dist/carla-*%d.%d-%s.egg' % (
-        sys.version_info.major,
-        sys.version_info.minor,
-        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
-except IndexError:
-    pass
+# try:
+#     sys.path.append(glob.glob('../../carla/dist/carla-*%d.%d-%s.egg' % (
+#         sys.version_info.major,
+#         sys.version_info.minor,
+#         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+# except IndexError:
+#     pass
 
 import carla
 import pygame
@@ -58,8 +58,6 @@ class CarlaEnv(object):
         self.timestep = 0
 
 
-
-
     @staticmethod
     def action_space(self):
         throttle_brake = Discrete(3)  # -1 brake, 0 keep, 1 throttle
@@ -77,7 +75,7 @@ class CarlaEnv(object):
         if self.render_pygame:
             self.display = pygame.display.set_mode((1700,1000)),
             pygame.HWSURFACE | pygame.DOUBLEBUF)
-            
+
         self.world.destroy()
         self.world.restart()
 
