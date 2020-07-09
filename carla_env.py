@@ -33,7 +33,7 @@ import numpy as np
 
 import gym
 from gym.spaces.box import Box
-from gym.spaces import Discrete, Tu
+from gym.spaces import Discrete, Tuple
 
 
 from utils import World, HUD
@@ -75,7 +75,7 @@ class CarlaEnv(object):
     def reset(self):
         # reset the render display panel
         if self.render_pygame:
-            self.display = pygame.display.set_mode((1700,1000)),
+            self.display = pygame.display.set_mode((1700,1000),
             pygame.HWSURFACE | pygame.DOUBLEBUF)
             
         self.world.destroy()
@@ -127,7 +127,7 @@ class CarlaEnv(object):
 
     def get_state(self):
         states = []
-        for vel in self.world.vehicles:
+        for veh in self.world.vehicles:
             state = []
             location = veh.get_location()
             state += [location.x, location.y]

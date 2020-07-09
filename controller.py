@@ -24,7 +24,7 @@ class controller(object):
 
     def step(self, decisions=None):
         self.timestep += 1
-        if isinstance(decisions,np.ndarray)
+        if isinstance(decisions,np.ndarray):
             dec = process(decisions)
             self.apply(dec) 
         
@@ -57,7 +57,7 @@ class CAV_controller(controller):
         elif dec[0] == 0:
             throttle = 0
             brake = 0
-        elif: dec[0]==1:
+        elif dec[0]==1:
             throttle = 1
             brake = 0
         else:
