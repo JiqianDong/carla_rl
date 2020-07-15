@@ -96,7 +96,7 @@ class CarlaEnv(object):
         collision = self.check_collision()
         done = False
         if collision:
-            print(collision)
+            print("collision here: ", collision)
             done = True
 
         reward = self.compute_reward(collision)

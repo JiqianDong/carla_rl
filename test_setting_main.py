@@ -17,9 +17,10 @@ import carla
 from carla_env import CarlaEnv
 import pygame
 
+print(pygame.__version__)
 def main(num_runs):
     
-    RENDER = True
+    RENDER = False
     TEST_SETTINGS = True
     MAX_STEPS_PER_EPISODE = 300
     
@@ -29,7 +30,7 @@ def main(num_runs):
         pygame.font.init()
 
         # create in
-        env = CarlaEnv()
+        env = CarlaEnv(render_pygame=RENDER)
 
         max_steps_per_episode = MAX_STEPS_PER_EPISODE
 

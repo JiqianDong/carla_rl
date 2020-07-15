@@ -99,7 +99,7 @@ class World(object):
             return blueprint
 
         LHDV_spawn_point = self.world.get_map().get_spawn_points()[hdv_loc]
-        LHDV_spawn_point.location.y -= lane_width*self.LHDV_FLAGS
+        LHDV_spawn_point.location.y += 2*lane_width*self.LHDV_FLAGS
 
         # print("LHDV",LHDV_spawn_point.location)
         CAV_spawn_point = self.world.get_map().get_spawn_points()[cav_loc]#random.choice(spawn_points) if spawn_points else carla.Transform()
@@ -143,7 +143,7 @@ class World(object):
     def setup_controllers(self):
         self.cav_controller = controller(self.CAV, True)
         # self.cav_controller = CAV_controller(self.CAV)
-        self.ldhv_controller = LHDV_controller(self.LHDV,self.LHDV_control_files[self.LHDV_FLAGS])
+        self.ldhv_controller = LHDV_controller(self.LHDV,False,self.LHDV_control_files[self.LHDV_FLAGS])
 
         self.bhdv_controller = controller(self.BHDV, True)
         
