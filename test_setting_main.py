@@ -19,8 +19,8 @@ import pygame
 
 print(pygame.__version__)
 def main(num_runs):
-    
-    RENDER = False
+    env = None
+    RENDER = True
     TEST_SETTINGS = True
     MAX_STEPS_PER_EPISODE = 300
     
@@ -66,7 +66,7 @@ def main(num_runs):
             time.sleep(0.01)
     finally:
 
-        if env.world is not None:
+        if env and env.world is not None:
             env.world.destroy()
 
         pygame.quit()

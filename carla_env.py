@@ -73,7 +73,7 @@ class CarlaEnv(object):
     def reset(self):
         # reset the render display panel
         if self.render_pygame:
-            self.display = pygame.display.set_mode((1700,1000),
+            self.display = pygame.display.set_mode((1280,760),
             pygame.HWSURFACE | pygame.DOUBLEBUF)
 
         self.world.destroy()
