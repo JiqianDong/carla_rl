@@ -52,7 +52,15 @@ class CarlaEnv(object):
         self.client.set_timeout(2.0)
 
         self.hud = HUD(1700,1000)
-        self.world = World(self.client.get_world(), self.hud)
+        self._carla_world = self.client.get_world()
+        
+        settings = self._carla_world.get_settings()
+        settings.synchronous_mode = True
+        settings.fixed_delta_seconds = 0.05
+        self._carla_world.apply_settings(settings)
+
+
+        self.world = World(self._carla_world, self.hud)
         self.render_pygame = render_pygame
 
         self.timestep = 0
@@ -61,8 +69,8 @@ class CarlaEnv(object):
     @staticmethod
     def action_space(self):
         throttle_brake = Discrete(3)  # -1 brake, 0 keep, 1 throttle
-        steering = Discrete(3)
-        return Tuple([throttle_brake,steering])
+        steering_increment = Discrete(3)
+        return Tuple([throttle_brake, steering_increment])
 
     @staticmethod
     def state_space(self):
@@ -76,10 +84,11 @@ class CarlaEnv(object):
             self.display = pygame.display.set_mode((1280,760),
             pygame.HWSURFACE | pygame.DOUBLEBUF)
 
-        self.world.destroy()
+        self.sych_distroy()
+        time.sleep(0.001)
         self.world.restart()
 
-        time.sleep(0.001)
+        
         self.timestep = 0
 
         return self.get_state()
@@ -116,6 +125,12 @@ class CarlaEnv(object):
         else:
             raise Exception("No display to render")
 
+
+    def cost_function(self, observation):
+
+        pass
+
+
     def check_collision(self):
         if len(self.world.collision_sensor.history)>0:
             return self.world.collision_sensor.history[-1]
@@ -148,3 +163,7 @@ class CarlaEnv(object):
             collision_penalty = collision[1] # the negative intensity of collision
 
         return base_reward - collision_penalty*weight_collision
+
+    def sych_distroy(self):
+        actors = self._carla_world.get_actors()
+        self.client.apply_batch([carla.command.DestroyActor(x) for x in actors])

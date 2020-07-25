@@ -17,10 +17,15 @@ import carla
 from carla_env import CarlaEnv
 import pygame
 
+
+
+
+
 def main(num_runs):
     env = None
-    RENDER = False
-    MAX_STEPS_PER_EPISODE = 30
+    RENDER = True
+    TEST_SETTINGS = True
+    MAX_STEPS_PER_EPISODE = 300
     
     try:
         quit_flag = False
@@ -34,28 +39,22 @@ def main(num_runs):
 
         clock = pygame.time.Clock()
 
-
         for _ in range(num_runs):
 
             state = env.reset()
             episode_reward = 0
             for timestep in range(max_steps_per_episode):
-                clock.tick()
-                env.world.tick(clock)
-                env._carla_world.tick()
+                clock.tick_busy_loop(60)
 
                 # check quit
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         quit_flag = True
 
-                rl_actions = np.random.choice(3,2)
+                if TEST_SETTINGS:
+                    rl_actions = None
 
                 state, reward, done, _ = env.step(rl_actions)
-                print("current control", env.world.cav_controller.current_control)
-
-
-
                 episode_reward += reward
                 env.world.tick(clock)
                 if done:
@@ -70,14 +69,7 @@ def main(num_runs):
     finally:
 
         if env and env.world is not None:
-            # env.world.destroy()
-            # env.world.destroy_all_actors()
-            env.sych_distroy()
-            print('\ndisabling synchronous mode.')
-            settings = env._carla_world.get_settings()
-            settings.synchronous_mode = False
-            env._carla_world.apply_settings(settings)
-        
+            env.world.destroy()
 
         pygame.quit()
 

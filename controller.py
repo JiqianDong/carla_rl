@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 
 class controller(object):
-    def __init__(self,  actor, carla_pilot=False):
+    def __init__(self,  actor, carla_pilot=False): # carla pilot is the autopilot defined by carla
 
         self.vehilcle = actor
         self.carla_pilot = carla_pilot
@@ -25,12 +25,12 @@ class controller(object):
     def step(self, decisions=None):
         self.timestep += 1
         if isinstance(decisions,np.ndarray):
-            dec = process(decisions)
+            dec = decisions.copy()
+            dec = self.process(dec)
             self.apply(dec) 
         
 
     def process(self, dec):
-        dec = decisions.copy()
         return dec
 
     def apply(self, dec):
@@ -43,6 +43,7 @@ class controller(object):
         self._control.steer = self.current_control['steer']
         self._control.brake = self.current_control['brake']
 
+        
         self.vehilcle.apply_control(self._control)
 
         

@@ -141,8 +141,8 @@ class World(object):
         self.hud.notification(actor_type)
 
     def setup_controllers(self):
-        self.cav_controller = controller(self.CAV, True)
-        # self.cav_controller = CAV_controller(self.CAV)
+        # self.cav_controller = controller(self.CAV, True)
+        self.cav_controller = CAV_controller(self.CAV)
         self.ldhv_controller = LHDV_controller(self.LHDV,False,self.LHDV_control_files[self.LHDV_FLAGS])
 
         self.bhdv_controller = controller(self.BHDV, True)
@@ -175,6 +175,10 @@ class World(object):
             if actor is not None:
                 actor.destroy()
 
+    def destroy_all_actors(self):
+        actor_ids = self.world.get_actors()
+        for actor_id in actor_ids:
+            self.world.get_actor(actor_id).destroy() 
 
 
 class CollisionSensor(object):
