@@ -47,7 +47,8 @@ class CarlaEnv(object):
                  host='127.0.0.1',
                  port=2000,
                  city_name='Town03',
-                 render_pygame=True):
+                 render_pygame=True,
+                 warming_up_steps=50):
         self.client = carla.Client(host,port)
         self.client.set_timeout(2.0)
 
@@ -64,7 +65,7 @@ class CarlaEnv(object):
         self.render_pygame = render_pygame
 
         self.timestep = 0
-
+        self.warming_up_steps = warming_up_steps
 
     @staticmethod
     def action_space(self):
@@ -86,7 +87,7 @@ class CarlaEnv(object):
             pygame.HWSURFACE | pygame.DOUBLEBUF)
 
         self.world.destroy()
-        # time.sleep(2)
+        time.sleep(2)
         self.world.restart()
 
         
@@ -94,6 +95,8 @@ class CarlaEnv(object):
         self.frame_num = None
 
         self.carla_update()
+
+        [self.step(None) for _ in range(self.warming_up_steps)] # warming up
 
 
         return self.get_state()
@@ -114,9 +117,6 @@ class CarlaEnv(object):
         self.world.bhdv_controller.step()
 
         self.carla_update()
-
-
-
 
         state = self.get_state() #next observation
 
@@ -156,7 +156,7 @@ class CarlaEnv(object):
             return None
 
     def get_state(self):
-        states = []
+        states = {}
         for veh in self.world.vehicles:
             state = []
             location = veh.get_location()
@@ -167,8 +167,8 @@ class CarlaEnv(object):
 
             accel = veh.get_acceleration()
             state += [accel.x, accel.y]
-            states.append(np.array(state))
-        states = np.array(states)
+
+            states[veh.attributes['role_name']] = state
         # print(state.shape)
         return states
 

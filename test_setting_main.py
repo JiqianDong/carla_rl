@@ -16,11 +16,13 @@ import carla
 
 from carla_env import CarlaEnv
 import pygame
+import pandas as pd 
 
 def main(num_runs):
     env = None
     RENDER = True
     MAX_STEPS_PER_EPISODE = 300
+    SAVE_INFO = True
     
     try:
         quit_flag = False
@@ -34,8 +36,10 @@ def main(num_runs):
 
         clock = pygame.time.Clock()
 
+        CAV_infos = []
+        HDV_infos = []
 
-        for _ in range(num_runs):
+        for episode in range(num_runs):
 
             state = env.reset()
             episode_reward = 0
@@ -53,8 +57,25 @@ def main(num_runs):
 
                 state, reward, done, _ = env.step(rl_actions)
 
+                # print(state)
+                cav_control = env.world.cav_controller.current_control
+
+
+                # print("current control: ", cav_control)
+                # print("carla control: ", env.world.CAV.get_control())
+                # print()
+                for veh_id, state_vals in state.items():
+
+                    if veh_id == 'CAV':
+                        CAV_info = [veh_id,episode,timestep] +state_vals+ list(cav_control.values())
+
+                        CAV_infos.append(CAV_info)
+                    else:
+                        hdv_info = [veh_id,episode,timestep] + state_vals
+                        HDV_infos.append(hdv_info)
 
                 episode_reward += reward
+
 
                 if done:
                     break
@@ -64,8 +85,14 @@ def main(num_runs):
                     return
             
             print("done in : ", timestep, " -- episode reward: ", episode_reward)
-            time.sleep(0.01)
+            # time.sleep(0.01)
     finally:
+        if SAVE_INFO:
+            cav_info = pd.DataFrame(CAV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay','throttle','steer','brake'])
+            cav_info.to_csv('./experience_data/cav_info.csv',index=False)
+
+            hdv_info = pd.DataFrame(HDV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay'])
+            hdv_info.to_csv('./experience_data/hdv_info.csv',index=False)
 
         if env and env.world is not None:
             env.world.destroy()
