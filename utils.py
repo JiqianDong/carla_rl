@@ -68,7 +68,9 @@ class World(object):
     def restart(self):
         # Set up vehicles
         self.LHDV_FLAGS = random.choice([0,1])
+
         self.setup_vehicles()
+
         # Set up the sensors.
         self.setup_sensors()
         self.setup_controllers()

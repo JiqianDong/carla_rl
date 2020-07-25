@@ -59,8 +59,8 @@ class CarlaEnv(object):
         settings.fixed_delta_seconds = 0.05
         self._carla_world.apply_settings(settings)
 
-
         self.world = World(self._carla_world, self.hud)
+        # time.sleep(2)
         self.render_pygame = render_pygame
 
         self.timestep = 0
@@ -80,18 +80,31 @@ class CarlaEnv(object):
 
     def reset(self):
         # reset the render display panel
+
         if self.render_pygame:
             self.display = pygame.display.set_mode((1280,760),
             pygame.HWSURFACE | pygame.DOUBLEBUF)
 
-        self.sych_distroy()
-        time.sleep(0.001)
+        self.world.destroy()
+        # time.sleep(2)
         self.world.restart()
 
         
         self.timestep = 0
+        self.frame_num = None
+
+        self.carla_update()
+
 
         return self.get_state()
+
+    def carla_update(self):
+        self._carla_world.tick() # update in the simulator
+        snap_shot = self._carla_world.wait_for_tick() # palse the simulator until future tick
+        if self.frame_num is not None:
+            if snap_shot.frame_count != self.frame_num + 1:
+                print('frame skip!')
+        self.frame_num = snap_shot.frame_count
 
 
     def step(self,rl_actions):
@@ -99,6 +112,11 @@ class CarlaEnv(object):
         self.world.cav_controller.step(rl_actions)
         self.world.ldhv_controller.step()
         self.world.bhdv_controller.step()
+
+        self.carla_update()
+
+
+
 
         state = self.get_state() #next observation
 
