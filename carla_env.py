@@ -34,7 +34,7 @@ import numpy as np
 import gym
 from gym.spaces.box import Box
 from gym.spaces import Discrete, Tuple
-
+from sklearn.metrics.pairwise import euclidean_distances
 
 from utils import World, HUD
 
@@ -48,7 +48,8 @@ class CarlaEnv(object):
                  port=2000,
                  city_name='Town03',
                  render_pygame=True,
-                 warming_up_steps=50):
+                 warming_up_steps=50
+                 window_size = 5):
         self.client = carla.Client(host,port)
         self.client.set_timeout(2.0)
 
@@ -66,6 +67,8 @@ class CarlaEnv(object):
 
         self.timestep = 0
         self.warming_up_steps = warming_up_steps
+        self.window_size = 5
+        self.state_list = []
 
     @staticmethod
     def action_space(self):
@@ -87,8 +90,10 @@ class CarlaEnv(object):
             pygame.HWSURFACE | pygame.DOUBLEBUF)
 
         self.world.destroy()
-        time.sleep(2)
+        time.sleep(0.2)
         self.world.restart()
+
+        self.state_list = []
 
         
         self.timestep = 0
@@ -96,7 +101,10 @@ class CarlaEnv(object):
 
         self.carla_update()
 
-        [self.step(None) for _ in range(self.warming_up_steps)] # warming up
+        self.step(None) for _ in range(self.warming_up_steps-self.window_size)
+
+        for init_stem in range(self.window_size):
+            self.state_list.append(self.step(None))
 
 
         return self.get_state()
@@ -144,11 +152,6 @@ class CarlaEnv(object):
             raise Exception("No display to render")
 
 
-    def cost_function(self, observation):
-
-        pass
-
-
     def check_collision(self):
         if len(self.world.collision_sensor.history)>0:
             return self.world.collision_sensor.history[-1]
@@ -169,7 +172,7 @@ class CarlaEnv(object):
             state += [accel.x, accel.y]
 
             states[veh.attributes['role_name']] = state
-        # print(state.shape)
+        # print(states)
         return states
 
     def compute_reward(self,collision=None):
@@ -181,6 +184,12 @@ class CarlaEnv(object):
             collision_penalty = collision[1] # the negative intensity of collision
 
         return base_reward - collision_penalty*weight_collision
+
+
+    def compute_cost(self,state):
+        
+
+
 
     def sych_distroy(self):
         actors = self._carla_world.get_actors()

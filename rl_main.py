@@ -16,16 +16,13 @@ import carla
 
 from carla_env import CarlaEnv
 import pygame
-
-
-
-
+import pandas as pd 
 
 def main(num_runs):
     env = None
     RENDER = True
-    TEST_SETTINGS = True
     MAX_STEPS_PER_EPISODE = 300
+    SAVE_INFO = False
     
     try:
         quit_flag = False
@@ -34,29 +31,46 @@ def main(num_runs):
 
         # create in
         env = CarlaEnv(render_pygame=RENDER)
-
         max_steps_per_episode = MAX_STEPS_PER_EPISODE
-
         clock = pygame.time.Clock()
+        CAV_infos = []
+        HDV_infos = []
 
-        for _ in range(num_runs):
+        for episode in range(num_runs):
 
             state = env.reset()
             episode_reward = 0
-            for timestep in range(max_steps_per_episode):
-                clock.tick_busy_loop(60)
 
+            for timestep in range(max_steps_per_episode):
+                clock.tick()
+                env.world.tick(clock)
                 # check quit
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         quit_flag = True
 
-                if TEST_SETTINGS:
-                    rl_actions = None
-
+                rl_actions = np.random.choice(3,2)
                 state, reward, done, _ = env.step(rl_actions)
+
+                # print(state)
+                CAV_control = env.world.CAV_controller.current_control
+                CAV_info = []
+                HDV_info = []
+                for veh_id, state_vals in state.items():
+                    if veh_id == 'CAV':
+                        CAV_info = [veh_id,episode,timestep] + state_vals + list(CAV_control.values())
+                    else:
+                        HDV_info.append([veh_id,episode,timestep] + state_vals)
+
+                
+
+                if SAVE_INFO: # save into csv files
+                    CAV_infos.append(CAV_info)
+                    HDV_infos.extend(HDV_info)
+
                 episode_reward += reward
-                env.world.tick(clock)
+
+
                 if done:
                     break
 
@@ -65,11 +79,24 @@ def main(num_runs):
                     return
             
             print("done in : ", timestep, " -- episode reward: ", episode_reward)
-            time.sleep(0.01)
+            # time.sleep(0.01)
     finally:
+        if SAVE_INFO:
+            CAV_info = pd.DataFrame(CAV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay','throttle','steer','brake'])
+            CAV_info.to_csv('./experience_data/CAV_info.csv',index=False)
+
+            HDV_info = pd.DataFrame(HDV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay'])
+            HDV_info.to_csv('./experience_data/HDV_info.csv',index=False)
 
         if env and env.world is not None:
             env.world.destroy()
+            # env.world.destroy_all_actors()
+            # env.sych_distroy()
+            
+            settings = env._carla_world.get_settings()
+            settings.synchronous_mode = False
+            env._carla_world.apply_settings(settings)
+            print('\ndisabling synchronous mode.')
 
         pygame.quit()
 

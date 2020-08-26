@@ -60,7 +60,6 @@ def main(num_runs):
                 # print(state)
                 cav_control = env.world.cav_controller.current_control
 
-
                 # print("current control: ", cav_control)
                 # print("carla control: ", env.world.CAV.get_control())
                 # print()
