@@ -18,67 +18,63 @@ from carla_env import CarlaEnv
 import pygame
 import pandas as pd 
 
+
+def gather_data(env, num_runs, max_steps_per_episode):
+    CAV_infos = []
+    HDV_infos = []
+
+    for episode in range(num_runs):
+
+        state = env.reset()
+        episode_reward = 0
+
+        for timestep in range(max_steps_per_episode):
+            clock.tick()
+            env.world.tick(clock)
+            # check quit
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    quit_flag = True
+
+            rl_actions = np.random.choice(3,2)
+            state, reward, done, _ = env.step(rl_actions) #state: {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
+            # print(state)
+            episode_reward += reward
+
+            if done:
+                break
+
+            if quit_flag:
+                print("stop in the middle ... ")
+                return
+        
+        print("done in : ", timestep, " -- episode reward: ", episode_reward)
+
 def main(num_runs):
     env = None
     RENDER = True
     MAX_STEPS_PER_EPISODE = 300
+    WARMING_UP_STEPS = 50
+    WINDOW_SIZE = 5
     SAVE_INFO = False
+
+    GATHER_DATA = True
     
     try:
         quit_flag = False
         pygame.init()
         pygame.font.init()
 
-        # create in
-        env = CarlaEnv(render_pygame=RENDER)
+        # create environment
+        env = CarlaEnv(render_pygame=RENDER,warming_up_steps=WARMING_UP_STEPS,window_size=WINDOW_SIZE)
+        
+        # clock = pygame.time.Clock()
+
         max_steps_per_episode = MAX_STEPS_PER_EPISODE
-        clock = pygame.time.Clock()
-        CAV_infos = []
-        HDV_infos = []
 
-        for episode in range(num_runs):
+        if GATHER_DATA:
+            gather_data()
 
-            state = env.reset()
-            episode_reward = 0
-
-            for timestep in range(max_steps_per_episode):
-                clock.tick()
-                env.world.tick(clock)
-                # check quit
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        quit_flag = True
-
-                rl_actions = np.random.choice(3,2)
-                state, reward, done, _ = env.step(rl_actions)
-
-                # print(state)
-                CAV_control = env.world.CAV_controller.current_control
-                CAV_info = []
-                HDV_info = []
-                for veh_id, state_vals in state.items():
-                    if veh_id == 'CAV':
-                        CAV_info = [veh_id,episode,timestep] + state_vals + list(CAV_control.values())
-                    else:
-                        HDV_info.append([veh_id,episode,timestep] + state_vals)
-
-                
-
-                if SAVE_INFO: # save into csv files
-                    CAV_infos.append(CAV_info)
-                    HDV_infos.extend(HDV_info)
-
-                episode_reward += reward
-
-
-                if done:
-                    break
-
-                if quit_flag:
-                    print("stop in the middle ... ")
-                    return
-            
-            print("done in : ", timestep, " -- episode reward: ", episode_reward)
             # time.sleep(0.01)
     finally:
         if SAVE_INFO:

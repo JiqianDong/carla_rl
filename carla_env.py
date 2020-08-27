@@ -48,7 +48,7 @@ class CarlaEnv(object):
                  port=2000,
                  city_name='Town03',
                  render_pygame=True,
-                 warming_up_steps=50
+                 warming_up_steps=50,
                  window_size = 5):
         self.client = carla.Client(host,port)
         self.client.set_timeout(2.0)
@@ -68,7 +68,7 @@ class CarlaEnv(object):
         self.timestep = 0
         self.warming_up_steps = warming_up_steps
         self.window_size = 5
-        self.state_list = []
+        self.current_state = {}  #  {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
 
     @staticmethod
     def action_space(self):
@@ -100,14 +100,10 @@ class CarlaEnv(object):
         self.frame_num = None
 
         self.carla_update()
+        assert self.warming_up_steps>self.window_size, "warming_up_steps should be larger than the window size"
+        [self.step(None) for _ in range(self.warming_up_steps)]
 
-        self.step(None) for _ in range(self.warming_up_steps-self.window_size)
-
-        for init_stem in range(self.window_size):
-            self.state_list.append(self.step(None))
-
-
-        return self.get_state()
+        return self.current_state
 
     def carla_update(self):
         self._carla_world.tick() # update in the simulator
@@ -159,9 +155,11 @@ class CarlaEnv(object):
             return None
 
     def get_state(self):
-        states = {}
+        
         for veh in self.world.vehicles:
             state = []
+            veh_name = veh.attributes['role_name']
+
             location = veh.get_location()
             state += [location.x, location.y]
 
@@ -171,9 +169,14 @@ class CarlaEnv(object):
             accel = veh.get_acceleration()
             state += [accel.x, accel.y]
 
-            states[veh.attributes['role_name']] = state
+            if veh_name == 'CAV':
+                state += self.world.cav_controller.current_control
+
+            if len(self.current_state[veh_name]) == self.window_size:
+                self.current_state[veh_name].pop(0)
+            self.current_state[veh_name].append(state)
         # print(states)
-        return states
+        return self.current_state
 
     def compute_reward(self,collision=None):
 
@@ -187,7 +190,7 @@ class CarlaEnv(object):
 
 
     def compute_cost(self,state):
-        
+        pass
 
 
 
