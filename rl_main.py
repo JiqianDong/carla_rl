@@ -19,15 +19,14 @@ import pygame
 import pandas as pd 
 
 
-def gather_data(env, num_runs, max_steps_per_episode):
+def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
     CAV_infos = []
     HDV_infos = []
-
+    clock = pygame.time.Clock()
+    quit_flag = False
     for episode in range(num_runs):
-
         state = env.reset()
         episode_reward = 0
-
         for timestep in range(max_steps_per_episode):
             clock.tick()
             env.world.tick(clock)
@@ -35,10 +34,9 @@ def gather_data(env, num_runs, max_steps_per_episode):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     quit_flag = True
-
             rl_actions = np.random.choice(3,2)
             state, reward, done, _ = env.step(rl_actions) #state: {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
-            # print(state)
+            # print(np.array(state['CAV']).shape) # (5,9)
             episode_reward += reward
 
             if done:
@@ -49,6 +47,13 @@ def gather_data(env, num_runs, max_steps_per_episode):
                 return
         
         print("done in : ", timestep, " -- episode reward: ", episode_reward)
+
+    if save_info:
+        CAV_info = pd.DataFrame(CAV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay','throttle','steer','brake'])
+        CAV_info.to_csv('./experience_data/CAV_info.csv',index=False)
+
+        HDV_info = pd.DataFrame(HDV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay'])
+        HDV_info.to_csv('./experience_data/HDV_info.csv',index=False)
 
 def main(num_runs):
     env = None
@@ -61,28 +66,23 @@ def main(num_runs):
     GATHER_DATA = True
     
     try:
-        quit_flag = False
+        
         pygame.init()
         pygame.font.init()
 
         # create environment
         env = CarlaEnv(render_pygame=RENDER,warming_up_steps=WARMING_UP_STEPS,window_size=WINDOW_SIZE)
         
-        # clock = pygame.time.Clock()
+        # 
 
         max_steps_per_episode = MAX_STEPS_PER_EPISODE
 
         if GATHER_DATA:
-            gather_data()
+            gather_data(env, num_runs=10, max_steps_per_episode=max_steps_per_episode, save_info=False)
 
             # time.sleep(0.01)
     finally:
-        if SAVE_INFO:
-            CAV_info = pd.DataFrame(CAV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay','throttle','steer','brake'])
-            CAV_info.to_csv('./experience_data/CAV_info.csv',index=False)
 
-            HDV_info = pd.DataFrame(HDV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay'])
-            HDV_info.to_csv('./experience_data/HDV_info.csv',index=False)
 
         if env and env.world is not None:
             env.world.destroy()

@@ -35,7 +35,7 @@ import gym
 from gym.spaces.box import Box
 from gym.spaces import Discrete, Tuple
 from sklearn.metrics.pairwise import euclidean_distances
-
+from collections import defaultdict
 from utils import World, HUD
 
 class CarlaEnv(object):
@@ -68,7 +68,7 @@ class CarlaEnv(object):
         self.timestep = 0
         self.warming_up_steps = warming_up_steps
         self.window_size = 5
-        self.current_state = {}  #  {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
+        self.current_state = defaultdict(list)  #  {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
 
     @staticmethod
     def action_space(self):
@@ -92,9 +92,7 @@ class CarlaEnv(object):
         self.world.destroy()
         time.sleep(0.2)
         self.world.restart()
-
-        self.state_list = []
-
+        self.current_state = defaultdict(list)  #reinitialize the current states
         
         self.timestep = 0
         self.frame_num = None
@@ -170,9 +168,9 @@ class CarlaEnv(object):
             state += [accel.x, accel.y]
 
             if veh_name == 'CAV':
-                state += self.world.cav_controller.current_control
+                state += list(self.world.cav_controller.current_control.values())
 
-            if len(self.current_state[veh_name]) == self.window_size:
+            if self.current_state and len(self.current_state[veh_name]) == self.window_size:
                 self.current_state[veh_name].pop(0)
             self.current_state[veh_name].append(state)
         # print(states)
