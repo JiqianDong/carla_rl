@@ -34,9 +34,11 @@ def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     quit_flag = True
-            rl_actions = np.random.choice(3,2)
+            rl_actions = np.random.choice(3,2)  # -1 brake, 0 keep, 1 throttle,  steering increment (-1,0,1)
+            print(rl_actions)
             state, reward, done, _ = env.step(rl_actions) #state: {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
-            # print(np.array(state['CAV']).shape) # (5,9)
+            print(state['CAV'][-1][-3:]) # throttle, steering, brake
+            print(env.world.CAV.get_control(),'\n')
             episode_reward += reward
 
             if done:
