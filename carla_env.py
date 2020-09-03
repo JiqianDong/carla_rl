@@ -167,16 +167,20 @@ class CarlaEnv(object):
             accel = veh.get_acceleration()
             state += [accel.x, accel.y]
 
-            if veh_name == 'CAV':
-                # current_control = self.world.cav_controller.current_control
-                # state += [current_control['throttle'],current_control['steer'],current_control['brake']]
-
-                current_control = veh.get_control()
-                state += [current_control.throttle, current_control.steer, current_control.brake]
             if self.current_state and len(self.current_state[veh_name]) == self.window_size:
                 self.current_state[veh_name].pop(0)
             self.current_state[veh_name].append(state)
         # print(states)
+
+        
+        # current_control = self.world.cav_controller.current_control
+        # current_control += [current_control['throttle'],current_control['steer'],current_control['brake']]
+        current_control = self.world.CAV.get_control()
+        current_control = [current_control.throttle, current_control.steer, current_control.brake]
+
+        if self.current_state and len(self.current_state["current_control"]) == self.window_size:
+            self.current_state["current_control"].pop(0)
+        self.current_state["current_control"].append(current_control)
         return self.current_state
 
     def compute_reward(self,collision=None):

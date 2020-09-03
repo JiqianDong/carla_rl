@@ -20,8 +20,8 @@ import pandas as pd
 
 
 def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
-    CAV_infos = []
-    HDV_infos = []
+    from dataset import Dataset
+    dataset = Dataset()
     clock = pygame.time.Clock()
     quit_flag = False
     for episode in range(num_runs):
@@ -35,10 +35,11 @@ def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
                 if event.type == pygame.QUIT:
                     quit_flag = True
             rl_actions = np.random.choice(3,2)  # -1 brake, 0 keep, 1 throttle,  steering increment (-1,0,1)
-            print(rl_actions)
-            state, reward, done, _ = env.step(rl_actions) #state: {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
-            print(state['CAV'][-1][-3:]) # throttle, steering, brake
-            print(env.world.CAV.get_control(),'\n')
+            # print(rl_actions)
+            next_state, reward, done, _ = env.step(rl_actions) #state: {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
+            # print(np.array(state['current_control']).shape) #(5,3)
+            # print(state['CAV'][-1][-3:]) # throttle, steering, brake
+            # print(env.world.CAV.get_control(),'\n')
             episode_reward += reward
 
             if done:
@@ -51,11 +52,7 @@ def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
         print("done in : ", timestep, " -- episode reward: ", episode_reward)
 
     if save_info:
-        CAV_info = pd.DataFrame(CAV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay','throttle','steer','brake'])
-        CAV_info.to_csv('./experience_data/CAV_info.csv',index=False)
-
-        HDV_info = pd.DataFrame(HDV_infos,columns=['veh_id','episode','episode_step','px','py','sx','sy','ax','ay'])
-        HDV_info.to_csv('./experience_data/HDV_info.csv',index=False)
+        pass
 
 def main(num_runs):
     env = None
@@ -80,7 +77,7 @@ def main(num_runs):
         max_steps_per_episode = MAX_STEPS_PER_EPISODE
 
         if GATHER_DATA:
-            gather_data(env, num_runs=10, max_steps_per_episode=max_steps_per_episode, save_info=False)
+            gather_data(env, num_runs=10, max_steps_per_episode=max_steps_per_episode, save_info=SAVE_INFO)
 
             # time.sleep(0.01)
     finally:

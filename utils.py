@@ -102,18 +102,22 @@ class World(object):
 
         LHDV_spawn_point = self.world.get_map().get_spawn_points()[hdv_loc]
         LHDV_spawn_point.location.y += 2*lane_width*self.LHDV_FLAGS
+        LHDV_spawn_point.location.z -= 1
 
         # print("LHDV",LHDV_spawn_point.location)
         CAV_spawn_point = self.world.get_map().get_spawn_points()[cav_loc]#random.choice(spawn_points) if spawn_points else carla.Transform()
         CAV_spawn_point.location.x -= loc_diff
+        CAV_spawn_point.location.z -= 1
         # print("CAV",CAV_spawn_point.location)
 
         FHDV_spawn_point = self.world.get_map().get_spawn_points()[hdv_loc]
         FHDV_spawn_point.location.x += headway_2
+        FHDV_spawn_point.location.z -= 1
         # print("FHDV",FHDV_spawn_point.location)
 
         BHDV_spawn_point = self.world.get_map().get_spawn_points()[cav_loc]
         BHDV_spawn_point.location.x -= headway
+        BHDV_spawn_point.location.z -= 1
         # print("BHDV",BHDV_spawn_point.location)
         
         self.CAV = self.world.try_spawn_actor(get_blueprint("CAV","model3","204,0,0"), CAV_spawn_point)
