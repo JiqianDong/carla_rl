@@ -38,14 +38,12 @@ def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
             rl_actions = np.random.choice(3,2)  # -1 brake, 0 keep, 1 throttle,  steering increment (-1,0,1)
             # print(rl_actions)
             next_state, reward, done, _ = env.step(rl_actions) #state: {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
-            # print(np.array(state['current_control']).shape) #(5,3)
-            # print(state['CAV'][-1][-3:]) # throttle, steering, brake
+            # print(np.array(state['current_control']).shape) #(5,3) throttle, steering, brake
             # print(env.world.CAV.get_control(),'\n')
-
-            print(current_state==next_state,'\n')
+            print(current_state, next_state, '\n')
             episode_reward += reward
             dataset.add(current_state,rl_actions,next_state,reward,done)
-            state = next_state
+            current_state = next_state
 
             if done:
                 break
@@ -66,7 +64,7 @@ def main(num_runs):
     MAX_STEPS_PER_EPISODE = 300
     WARMING_UP_STEPS = 50
     WINDOW_SIZE = 5
-    SAVE_INFO = True
+    SAVE_INFO = False
 
     GATHER_DATA = True
     TRAINING = True
@@ -85,7 +83,7 @@ def main(num_runs):
             gather_data(env, num_runs=10, max_steps_per_episode=max_steps_per_episode, save_info=SAVE_INFO)
 
         if TRAINING: 
-            
+
             pass
 
     finally:

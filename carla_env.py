@@ -121,6 +121,7 @@ class CarlaEnv(object):
         self.world.bhdv_controller.step()
 
         self.carla_update()
+        # self.carla_update()
 
         state_ = copy.deepcopy(self.get_state()) #next observation
 
@@ -172,13 +173,15 @@ class CarlaEnv(object):
             if self.current_state and len(self.current_state[veh_name]) == self.window_size:
                 self.current_state[veh_name].pop(0)
             self.current_state[veh_name].append(state)
-        # print(states)
 
         
-        # current_control = self.world.cav_controller.current_control
-        # current_control += [current_control['throttle'],current_control['steer'],current_control['brake']]
-        current_control = self.world.CAV.get_control()
-        current_control = [current_control.throttle, current_control.steer, current_control.brake]
+        current_control = self.world.cav_controller.current_control
+        current_control = [current_control['throttle'],current_control['steer'],current_control['brake']]
+
+        ####  one timestep behind
+
+        # current_control = self.world.CAV.get_control()
+        # current_control = [current_control.throttle, current_control.steer, current_control.brake]
 
         if self.current_state and len(self.current_state["current_control"]) == self.window_size:
             self.current_state["current_control"].pop(0)
