@@ -37,6 +37,7 @@ from gym.spaces import Discrete, Tuple
 from sklearn.metrics.pairwise import euclidean_distances
 from collections import defaultdict
 from utils import World, HUD
+import copy
 
 class CarlaEnv(object):
     '''
@@ -101,12 +102,13 @@ class CarlaEnv(object):
         assert self.warming_up_steps>self.window_size, "warming_up_steps should be larger than the window size"
         [self.step(None) for _ in range(self.warming_up_steps)]
 
-        return self.current_state
+        return copy.deepcopy(self.current_state)
 
     def carla_update(self):
         self._carla_world.tick() # update in the simulator
         snap_shot = self._carla_world.wait_for_tick() # palse the simulator until future tick
         if self.frame_num is not None:
+            # print(self.frame_num)
             if snap_shot.frame_count != self.frame_num + 1:
                 print('frame skip!')
         self.frame_num = snap_shot.frame_count
@@ -120,15 +122,15 @@ class CarlaEnv(object):
 
         self.carla_update()
 
-        state = self.get_state() #next observation
+        state_ = copy.deepcopy(self.get_state()) #next observation
 
         collision = self.check_collision()
-        done = False
+        done_ = False
         if collision:
             print("collision here: ", collision)
-            done = True
+            done_ = True
 
-        reward = self.compute_reward(collision)
+        reward_ = self.compute_reward(collision)
 
         self.timestep += 1 
         infos = {}
@@ -136,7 +138,7 @@ class CarlaEnv(object):
         if self.render_pygame:
             self.render_frame()
 
-        return state, reward, done, infos
+        return state_, reward_, done_, infos
 
     def render_frame(self):
         if self.display:
@@ -169,18 +171,19 @@ class CarlaEnv(object):
 
             if self.current_state and len(self.current_state[veh_name]) == self.window_size:
                 self.current_state[veh_name].pop(0)
-            self.current_state[veh_name].append(np.array(state))
+            self.current_state[veh_name].append(state)
         # print(states)
 
         
         # current_control = self.world.cav_controller.current_control
         # current_control += [current_control['throttle'],current_control['steer'],current_control['brake']]
         current_control = self.world.CAV.get_control()
-        current_control = np.array([current_control.throttle, current_control.steer, current_control.brake])
+        current_control = [current_control.throttle, current_control.steer, current_control.brake]
 
         if self.current_state and len(self.current_state["current_control"]) == self.window_size:
             self.current_state["current_control"].pop(0)
         self.current_state["current_control"].append(current_control)
+
         return self.current_state
 
     def compute_reward(self,collision=None):
@@ -196,7 +199,6 @@ class CarlaEnv(object):
 
     def compute_cost(self,state):
         pass
-
 
 
     def sych_distroy(self):
