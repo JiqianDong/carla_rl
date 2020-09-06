@@ -1,4 +1,6 @@
 import numpy as np
+from collections import defaultdict
+import pickle
 
 class Dataset(object):
 
@@ -8,7 +10,8 @@ class Dataset(object):
         self._next_states = []
         self._rewards = []
         self._dones = []
-
+        self._state_history = defaultdict(list) # for computing state mean, std, 
+        self._state_diff_history = defaultdict(list) # for computing state difference mean, std
 
     def add(self, state, action, next_state, reward, done):
         """
@@ -20,6 +23,12 @@ class Dataset(object):
         self._next_states.append(next_state)
         self._rewards.append(reward)
         self._dones.append(done)
+
+        for key,val in state.items():
+            self._state_history[key].append(np.array(val))
+
+            if key in next_state:
+                self._state_diff_history[key].append(np.array(next_state[key]) - np.array(val))
 
     def append(self, other_dataset):
         """
@@ -39,89 +48,86 @@ class Dataset(object):
     def __len__(self):
         return len(self._states)
 
+
     @property
     def state_mean(self):
-        for state in self._states:
-            
-        return 
+        mean = {}
+        for key,val in self._state_history.items():
+            mean[key] = np.mean(val,axis=0) 
+        return mean
+
 
     @property
     def state_std(self):
-        return np.std(self._states, axis=0)
+        std = {}
+        for key,val in self._state_history.items():
+            std[key] = np.std(val,axis=0) 
+        return std
 
-    @property
-    def action_mean(self):
-        return np.mean(self._actions, axis=0)
-
-    @property
-    def action_std(self):
-        return np.std(self._actions, axis=0)
 
     @property
     def delta_state_mean(self):
-        return np.mean(np.array(self._next_states) - np.array(self._states), axis=0)
+        mean = {}
+        for key,val in self._state_diff_history.items():
+            mean[key] = np.mean(val,axis=0) 
+        return mean
 
     @property
     def delta_state_std(self):
-        return np.std(np.array(self._next_states) - np.array(self._states), axis=0)
+        std = {}
+        for key,val in self._state_diff_history.items():
+            std[key] = np.std(val,axis=0) 
+        return std
 
 
-    def rollout_iterator(self):
-        """
-        Iterate through all the rollouts in the dataset sequentially
-        """
-        end_indices = np.nonzero(self._dones)[0] + 1
+    # def rollout_iterator(self):
+    #     """
+    #     Iterate through all the rollouts in the dataset sequentially
+    #     """
+    #     end_indices = np.nonzero(self._dones)[0] + 1
 
-        states = np.asarray(self._states)
-        actions = np.asarray(self._actions)
-        next_states = np.asarray(self._next_states)
-        rewards = np.asarray(self._rewards)
-        dones = np.asarray(self._dones)
+    #     states = np.asarray(self._states)
+    #     actions = np.asarray(self._actions)
+    #     next_states = np.asarray(self._next_states)
+    #     rewards = np.asarray(self._rewards)
+    #     dones = np.asarray(self._dones)
 
-        start_idx = 0
-        for end_idx in end_indices:
-            indices = np.arange(start_idx, end_idx)
-            yield states[indices], actions[indices], next_states[indices], rewards[indices], dones[indices]
-            start_idx = end_idx
+    #     start_idx = 0
+    #     for end_idx in end_indices:
+    #         indices = np.arange(start_idx, end_idx)
+    #         yield states[indices], actions[indices], next_states[indices], rewards[indices], dones[indices]
+    #         start_idx = end_idx
 
     def random_iterator(self, batch_size):
         """
         Iterate once through all (s, a, r, s') in batches in a random order
+        For only training the system dynamic function only.
         """
         all_indices = np.nonzero(np.logical_not(self._dones))[0]
         np.random.shuffle(all_indices)
-
-        states = np.asarray(self._states)
-        actions = np.asarray(self._actions)
-        next_states = np.asarray(self._next_states)
-        rewards = np.asarray(self._rewards)
-        dones = np.asarray(self._dones)
+        actions = np.array(self._actions)
 
         i = 0
         while i < len(all_indices):
             indices = all_indices[i:i+batch_size]
+            output_state = defaultdict(list)
+            output_next_state = defaultdict(list)
+            for ind in indices:
+                current = self._states[ind]
+                next_ = self._next_states[ind]
+                for key, val in current.items():
+                    output_state[key].append(val)
 
-            yield states[indices], actions[indices], next_states[indices], rewards[indices], dones[indices]
+                for key,val in next_.items():
+                    output_next_state[key].append(val)
+
+            for key in output_state.keys():
+                output_state[key] = np.array(output_state[key])
+
+            for key in output_next_state.keys():
+                output_next_state[key] = np.array(output_next_state[key])
+            
+            yield output_state, actions[indices], output_next_state
 
             i += batch_size
 
-    ###############
-    ### Logging ###
-    ###############
-
-    def log(self):
-        end_idxs = np.nonzero(self._dones)[0] + 1
-
-        returns = []
-
-        start_idx = 0
-        for end_idx in end_idxs:
-            rewards = self._rewards[start_idx:end_idx]
-            returns.append(np.sum(rewards))
-
-            start_idx = end_idx
-
-        logger.record_tabular('ReturnAvg', np.mean(returns))
-        logger.record_tabular('ReturnStd', np.std(returns))
-        logger.record_tabular('ReturnMin', np.min(returns))
-        logger.record_tabular('ReturnMax', np.max(returns))
