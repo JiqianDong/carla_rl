@@ -169,14 +169,14 @@ class CarlaEnv(object):
 
             if self.current_state and len(self.current_state[veh_name]) == self.window_size:
                 self.current_state[veh_name].pop(0)
-            self.current_state[veh_name].append(state)
+            self.current_state[veh_name].append(np.array(state))
         # print(states)
 
         
         # current_control = self.world.cav_controller.current_control
         # current_control += [current_control['throttle'],current_control['steer'],current_control['brake']]
         current_control = self.world.CAV.get_control()
-        current_control = [current_control.throttle, current_control.steer, current_control.brake]
+        current_control = np.array([current_control.throttle, current_control.steer, current_control.brake])
 
         if self.current_state and len(self.current_state["current_control"]) == self.window_size:
             self.current_state["current_control"].pop(0)
