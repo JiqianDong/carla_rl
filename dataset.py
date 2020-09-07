@@ -98,7 +98,7 @@ class Dataset(object):
     #         yield states[indices], actions[indices], next_states[indices], rewards[indices], dones[indices]
     #         start_idx = end_idx
 
-    def random_iterator(self, batch_size):
+    def random_iterator(self, batch_size, return_sequence=True):
         """
         Iterate once through all (s, a, r, s') in batches in a random order
         For only training the system dynamic function only.
@@ -119,7 +119,10 @@ class Dataset(object):
                     output_state[key].append(val)
 
                 for key,val in next_.items():
-                    output_next_state[key].append(val)
+                    if return_sequence:
+                        output_next_state[key].append(val)
+                    else:
+                        output_next_state[key].append(val[-1,:])
 
             for key in output_state.keys():
                 output_state[key] = np.array(output_state[key])
