@@ -64,10 +64,11 @@ def main(num_runs):
     MAX_STEPS_PER_EPISODE = 300
     WARMING_UP_STEPS = 50
     WINDOW_SIZE = 5
-    SAVE_INFO = True
+    
     RETURN_SEQUENCE = False
 
     GATHER_DATA = True
+    SAVE_INFO = True
     TRAINING = True
     
     try:
