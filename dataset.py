@@ -122,7 +122,7 @@ class Dataset(object):
                     if return_sequence:
                         output_next_state[key].append(val)
                     else:
-                        output_next_state[key].append(val[-1,:])
+                        output_next_state[key].append(val[-1])
 
             for key in output_state.keys():
                 output_state[key] = np.array(output_state[key])

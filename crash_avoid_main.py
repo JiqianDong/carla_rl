@@ -27,6 +27,8 @@ def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
     for episode in range(num_runs):
         current_state = env.reset().copy()
         episode_reward = 0
+
+        current_action = np.array([1,1])
         for timestep in range(max_steps_per_episode):
             clock.tick()
             env.world.tick(clock)
@@ -34,17 +36,20 @@ def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     quit_flag = True
-            rl_actions = np.random.choice(3,2)  # -1 brake, 0 keep, 1 throttle,  steering increment (-1,0,1)
-            # print(rl_actions)
+            rl_actions = np.random.choice(3,2)  # 0 brake, 1 keep, 2 throttle,  steering increment (0,1,2)
+            # print('RL action',rl_actions)
             next_state, reward, done, _ = env.step(rl_actions) #state: {"CAV":[window_size, num_features=9], "LHDV":[window_size, num_features=6]}
             # print(np.array(state['current_control']).shape) #(5,3) throttle, steering, brake
             # print(env.world.CAV.get_control(),'\n')
-            print(current_state, next_state, '\n')
+            # print(current_state, next_state, '\n')
+            # print(current_state['CAV'], next_state['CAV'], '\n')
             episode_reward += reward
-            dataset.add(current_state,rl_actions,next_state,reward,done)
+            dataset.add(current_state,current_action,next_state,reward,done)
             current_state = next_state
+            current_action = rl_actions
 
             if done:
+                print(next_state['CAV'])
                 break
 
             if quit_flag:
