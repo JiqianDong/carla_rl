@@ -79,6 +79,16 @@ class Dataset(object):
             std[key] = np.std(val,axis=0) 
         return std
 
+    def tensorfy_dict(self,dic):
+        for key in dic.keys():
+            dic[key] = torch.tensor(dic[key]).float()
+        return dic
+
+
+    def numpyfy_dict(self,dic):
+        for key in dic.keys():
+            dic[key] = np.array(dic[key])
+        return dic   
 
     # def rollout_iterator(self):
     #     """
@@ -98,7 +108,7 @@ class Dataset(object):
     #         yield states[indices], actions[indices], next_states[indices], rewards[indices], dones[indices]
     #         start_idx = end_idx
 
-    def random_iterator(self, batch_size, return_sequence=True):
+    def random_iterator(self, batch_size, return_sequence=True, return_tensor=True):
         """
         Iterate once through all (s, a, r, s') in batches in a random order
         For only training the system dynamic function only.
@@ -124,11 +134,12 @@ class Dataset(object):
                     else:
                         output_next_state[key].append(val[-1])
 
-            for key in output_state.keys():
-                output_state[key] = np.array(output_state[key])
-
-            for key in output_next_state.keys():
-                output_next_state[key] = np.array(output_next_state[key])
+            if return_tensor:
+                output_state = self.tensorfy_dict(output_state)
+                output_next_state = self.tensorfy_dict(output_next_state)
+            else:
+                output_state = self.numpyfy_dict(output_state)
+                output_next_state = self.numpyfy_dict(output_next_state)
             
             yield output_state, actions[indices], output_next_state
 
