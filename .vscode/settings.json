@@ -1,3 +1,4 @@
 {
-    "python.pythonPath": "/home/ai/.pyenv/versions/3.5.9/bin/python"
+    "python.pythonPath": "D:\\Python\\python.exe",
+    "python.dataScience.jupyterServerURI": "local"
 }

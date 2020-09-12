@@ -26,7 +26,6 @@ def gather_data(env, num_runs, max_steps_per_episode, save_info=False):
     quit_flag = False
     for episode in range(num_runs):
         current_state = env.reset().copy()
-
         episode_reward = 0
         for timestep in range(max_steps_per_episode):
             clock.tick()
@@ -66,10 +65,10 @@ def main(num_runs):
     WINDOW_SIZE = 5
     
     RETURN_SEQUENCE = False
-
     GATHER_DATA = True
     SAVE_INFO = True
     TRAINING = True
+    TEST = False
     
     try:
         
@@ -84,9 +83,15 @@ def main(num_runs):
         if GATHER_DATA:
             gather_data(env, num_runs=10, max_steps_per_episode=max_steps_per_episode, save_info=SAVE_INFO)
 
-        if TRAINING: 
+        elif TRAINING: 
 
             pass
+        
+        elif TEST:
+            pass
+
+
+
 
     finally:
         if env and env.world is not None:
