@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VIP求解引擎模块架构深度设计 v3.6</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif;line-height:1.7;margin:0;padding:20px;background:#f5f7fa;color:#333}
+.container{max-width:1200px;margin:0 auto}
+.header{background:linear-gradient(135deg,#2c3e50,#3498db);color:#fff;padding:30px;border-radius:12px;margin-bottom:30px;box-shadow:0 4px 12px rgba(44,62,80,0.3)}
+.header h1{margin:0;font-size:26px}.header .subtitle{margin-top:8px;opacity:.85;font-size:13px}
+.alert-critical{background:#fff3cd;border-left:4px solid #ffc107;padding:18px;margin:20px 0;border-radius:0 8px 8px 0}
+.alert-critical h3{margin-top:0;color:#856404}
+.section{background:#fff;padding:24px;margin:20px 0;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.section h2{color:#2c3e50;border-bottom:2px solid #3498db;padding-bottom:10px;margin-top:0;font-size:20px}
+.section h3{color:#34495e;margin-top:18px;font-size:17px}.section h4{color:#2c3e50;margin-top:14px;font-size:15px}
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13px}
+th,td{border:1px solid #ddd;padding:9px;text-align:left}
+th{background:#3498db;color:#fff;font-weight:600}
+tr:nth-child(even){background:#f8f9fa}
+.code-block{background:#1a1a2e;color:#e0e0e0;padding:14px;border-radius:8px;font-family:"Courier New",monospace;font-size:12px;overflow-x:auto;margin:10px 0;white-space:pre-wrap}
+.comparison{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:14px 0}
+.comparison-box{padding:14px;border-radius:8px}
+.wrong{background:#fee;border:1px solid #e74c3c}.correct{background:#efe;border:1px solid #27ae60}
+.comparison-box h4{margin-top:0}.wrong h4{color:#e74c3c}.correct h4{color:#27ae60}
+.tag{display:inline-block;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700}
+.tag-error{background:#e74c3c;color:#fff}.tag-fix{background:#27ae60;color:#fff}.tag-new{background:#9b59b6;color:#fff}
+.flow{display:flex;align-items:center;gap:8px;margin:12px 0;flex-wrap:wrap}
+.flow-box{background:#3498db;color:#fff;padding:8px 14px;border-radius:6px;font-weight:500;font-size:13px}
+.flow-box.green{background:#27ae60}.flow-box.red{background:#e74c3c}.flow-box.orange{background:#f39c12}
+.flow-arrow{font-size:18px;color:#7f8c8d}
+.module-box{border:2px solid #3498db;border-radius:10px;padding:16px;margin:12px 0;background:#f0f8ff}
+.module-box h4{margin-top:0;color:#2c3e50}
+.diagram{background:#fafafa;border:1px dashed #ccc;padding:16px;border-radius:8px;margin:12px 0;font-family:monospace;font-size:12px;line-height:1.8}
+.summary-box{background:#e8f6f3;border:1px solid #1abc9c;padding:16px;border-radius:8px;margin:14px 0}
+.summary-box h4{margin-top:0;color:#16a085}
+ol,ul{padding-left:20px}li{margin:6px 0}
+.mermaid{background:#fff;padding:16px;border-radius:8px;margin:14px 0;text-align:center;border:1px solid #ddd}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>VIP求解引擎模块架构深度设计 v3.6</h1>
+<div class="subtitle">版本: v3.6 | 日期: 2026-06-09 | 作者: 北冥Evo<br>核心内容: 13章节完整闭环 | 策略选择逻辑 | 参数边界处理策略 | 评估规则集成 | 可直接指导开发</div>
+</div>
+
+<div class="section">
+<h2>目录</h2>
+<table>
+<tr><td><a href="#ch1">1. 现有代码逻辑深度分析</a></td><td><a href="#ch7">7. 渐进式调整压缩器</a></td></tr>
+<tr><td><a href="#ch2">2. 三层漏斗架构设计</a></td><td><a href="#ch8">8. 普通用户指标获取方案</a></td></tr>
+<tr><td><a href="#ch3">3. 多目标转单目标数学推导</a></td><td><a href="#ch9">9. 评估规则对齐与闭环控制</a></td></tr>
+<tr><td><a href="#ch4">4. 求解算法对比与选型</a></td><td><a href="#ch10">10. 完整数据流与执行时序</a></td></tr>
+<tr><td><a href="#ch5">5. 求解引擎模块架构</a></td><td><a href="#ch11">11. 接口定义与数据类</a></td></tr>
+<tr><td><a href="#ch6">6. 参数边界动态计算</a></td><td><a href="#ch12">12. 实施路线图与优先级</a></td></tr>
+<tr><td></td><td><a href="#ch13">13. 测试验证方案</a></td></tr>
+</table>
+</div>
+
+<!-- 第 1 章 -->
+<div class="section" id="ch1">
+<h2>1. 现有代码逻辑深度分析</h2>
+<h3>1.1 现有 LLM 智能尝试方案架构</h3>
+<p>现有代码采用 <strong>4 Skill + AgentLoop ReAct 循环</strong> 架构，完整流程如下：</p>
+<div style="display:flex;flex-direction:column;gap:12px;margin:16px 0;">
+  <div style="background:#f8f9fa;border:2px solid #3498db;border-radius:8px;padding:16px;">
+    <div style="font-weight:700;color:#2c3e50;margin-bottom:10px;">AgentLoop (ReAct 循环)</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;">
+      <div style="flex:1;min-width:200px;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px;">
+        <div style="font-weight:600;color:#e74c3c;">Step 1: evaluate Skill</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">查询 VIP 指标，评估是否达标</div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">判定：<=20% AchievedTarget, >20% ExceedTarget/NotAchievedTarget</div>
+      </div>
+      <div style="flex:1;min-width:200px;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px;">
+        <div style="font-weight:600;color:#f39c12;">Step 2: policies-plan Skill</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">策略选择：LTE→BEGBR+DACQ, NR→FWA</div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">遵循"提>限>拒"优先级</div>
+      </div>
+      <div style="flex:1;min-width:200px;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px;">
+        <div style="font-weight:600;color:#27ae60;">Step 3: policies-build Skill</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">参数规划：初次默认值/差距>30%二分法/差距<30%固定步长</div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">BEGBR：left=VIP目标, right=2倍目标</div>
+      </div>
+      <div style="flex:1;min-width:200px;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px;">
+        <div style="font-weight:600;color:#9b59b6;">Step 4: policies-effect-predict</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">效果预测与下发决策</div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">所有小区 AchievedTarget → ISSUABLE</div>
+      </div>
+      <div style="flex:1;min-width:200px;background:#fff;border:1px solid #ddd;border-radius:6px;padding:10px;">
+        <div style="font-weight:600;color:#34495e;">Step 5: 执行 MML 指令</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">MML 生成格式：LST/SET/ADD/RMV</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h3>1.2 现有方案的 6 个核心问题</h3>
+<table>
+<tr><th>问题</th><th>影响</th><th>解决方案</th></tr>
+<tr><td><strong>单目标优化</strong><br>只优化 VIP 速率，忽略普通用户</td><td>高负载下普通用户速率可能严重受损</td><td>引入多目标求解，VIP 优先 + 普通用户底线约束</td></tr>
+<tr><td><strong>规则驱动</strong><br>策略选择依赖专家经验规则，无法证明最优性</td><td>可能错过更优策略组合</td><td>ε-约束枚举法，数学保证 Pareto 前沿不遗漏</td></tr>
+<tr><td><strong>参数枚举盲目</strong><br>二分法/固定步长调整，无全局视角</td><td>调整效率低，可能多次迭代才收敛</td><td>解空间压缩 + 精确枚举，1 次求解找到最优</td></tr>
+<tr><td><strong>无最优性证明</strong><br>无法证明当前策略是最优的</td><td>无法回答"为什么选这个参数"的质疑</td><td>Pareto 前沿 + 最优性间隙 = 0，可解释求解过程</td></tr>
+<tr><td><strong>普通用户指标缺失</strong><br>无法查询普通用户速率</td><td>多目标求解缺少约束条件</td><td>3 条路径（PRB 反推/新增工具/经验公式）</td></tr>
+<tr><td><strong>大规模扩展困难</strong><br>单小区求解尚可，百小区以上性能下降</td><td>无法满足大规模网络保障需求</td><td>小区级并行 + 增量求解 + 区域分组求解</td></tr>
+</table>
+</div>
+
+<!-- 第 2 章 -->
+<h2>2. 三层漏斗架构设计</h2>
+<h3>2.1 为什么需要三层架构？</h3>
+<table>
+<tr><th>方案</th><th>求解速度</th><th>最优性保证</th><th>可解释性</th><th>经验利用</th></tr>
+<tr><td><strong>纯 LLM 方案</strong></td><td>30-120 秒</td><td>无（局部最优）</td><td>LLM 推理链（不可验证）</td><td>充分利用</td></tr>
+<tr><td><strong>纯求解器方案</strong></td><td>大规模网络数小时</td><td>数学全局最优</td><td>白盒（可追溯）</td><td>无</td></tr>
+<tr><td><strong>三层漏斗方案</strong><span class="tag tag-fix">推荐</span></td><td>< 100ms</td><td>数学全局最优</td><td>白盒+经验增强</td><td>经验+数学双重优化</td></tr>
+</table>
+
+<h3>2.2 三层漏斗详细设计</h3>
+<div style="display:flex;flex-direction:column;gap:16px;margin:16px 0;">
+  <div style="border:3px solid #e74c3c;border-radius:10px;padding:16px;background:#fff5f5;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <div style="background:#e74c3c;color:white;padding:4px 12px;border-radius:20px;font-weight:700;font-size:14px;">第 1 层</div>
+      <div style="font-weight:700;color:#2c3e50;font-size:16px;">LLM 智能尝试（粗筛）</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="background:#f8f9fa;padding:10px;border-radius:6px;">
+        <div style="font-weight:600;color:#e74c3c;font-size:13px;">输入</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">10^6 种可能组合<br>（4 模块 × 5 档位 × 策略组合）</div>
+      </div>
+      <div style="background:#f0f8ff;padding:10px;border-radius:6px;">
+        <div style="font-weight:600;color:#3498db;font-size:13px;">输出</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">~100 种候选组合<br>压缩比：10^4</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:#555;">
+      <strong>LLM 推理逻辑：</strong>VIP 缺口>50%保留 BEGBR+DACQ | 普通用户安全<20%排除 DACQ/RRC | PRB>95%保留所有策略
+    </div>
+  </div>
+  
+  <div style="text-align:center;color:#7f8c8d;font-size:20px;">↓</div>
+  
+  <div style="border:3px solid #3498db;border-radius:10px;padding:16px;background:#f0f8ff;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <div style="background:#3498db;color:white;padding:4px 12px;border-radius:20px;font-weight:700;font-size:14px;">第 2 层</div>
+      <div style="font-weight:700;color:#2c3e50;font-size:16px;">知识驱动压缩（精筛）</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="background:#fff;padding:10px;border-radius:6px;">
+        <div style="font-weight:600;color:#3498db;font-size:13px;">输入</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">~100 种候选组合</div>
+      </div>
+      <div style="background:#fff;padding:10px;border-radius:6px;">
+        <div style="font-weight:600;color:#27ae60;font-size:13px;">输出</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">~20 种高概率有效组合<br>压缩比：5</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:#555;">
+      <strong>压缩规则：</strong>提取历史成功率>80%策略 | 匹配小区 RAT 类型和负载 | 参数压缩到历史有效区间 | 应用策略预过滤器
+    </div>
+  </div>
+  
+  <div style="text-align:center;color:#7f8c8d;font-size:20px;">↓</div>
+  
+  <div style="border:3px solid #27ae60;border-radius:10px;padding:16px;background:#f0fff4;">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+      <div style="background:#27ae60;color:white;padding:4px 12px;border-radius:20px;font-weight:700;font-size:14px;">第 3 层</div>
+      <div style="font-weight:700;color:#2c3e50;font-size:16px;">专业求解器（精确求解）</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+      <div style="background:#fff;padding:10px;border-radius:6px;">
+        <div style="font-weight:600;color:#27ae60;font-size:13px;">输入</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">~20 种高概率组合</div>
+      </div>
+      <div style="background:#fff;padding:10px;border-radius:6px;">
+        <div style="font-weight:600;color:#9b59b6;font-size:13px;">输出</div>
+        <div style="font-size:12px;color:#666;margin-top:4px;">Pareto 前沿 + 最优解<br>数学证明最优性</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:#555;">
+      <strong>求解方法：</strong>ε-约束法 | 完全枚举 | Pareto 校验 | 求解速度：< 1ms
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- 第 3 章 -->
+<div class="section" id="ch3">
+<h2>3. 多目标转单目标数学推导</h2>
+<h3>3.1 原始多目标问题定义</h3>
+<div class="code-block">
+maximize: f₁(x) = VIP_rate(x)      # 目标 1：最大化 VIP 速率
+maximize: f₂(x) = Common_rate(x)   # 目标 2：最大化普通用户速率
+subject to: x ∈ X                  # 可行域（模块组合 × 参数值）
+
+其中：
+x = {x_BEGBR, x_FWA, x_DACQ, x_RRC} ∈ {0, 0.25, 0.5, 0.75, 1.0}  # 参数档位
+X = 所有可能的模块组合和参数值构成的有限离散空间
+</div>
+
+<h3>3.2 ε-约束法转化（推荐）</h3>
+<div class="code-block">
+转化为单目标+约束问题：
+maximize: f₁(x) = VIP_rate(x)        ← 单目标
+subject to: f₂(x) >= ε                ← 普通用户底线约束
+            x ∈ X                     ← 可行域
+
+ε 的扫描策略：
+ε ∈ [min(Common_rate), max(Common_rate)]
+扫描步长：Δε = (max - min) / N, N = 10-20
+
+求解步骤：
+1. 设定 ε₁ = min(Common_rate)
+2. 求解 maximize f₁(x) s.t. f₂(x) >= ε₁ → 得到 Pareto 解 p₁
+3. ε₂ = ε₁ + Δε, 求解 → p₂
+4. 重复直到 ε = max(Common_rate)
+5. 合并所有 p₁, p₂, ..., pN → 完整 Pareto 前沿
+</div>
+
+<h3>3.3 Pareto 前沿选择策略</h3>
+<p>得到完整 Pareto 前沿后，如何选择最优解？</p>
+<table>
+<tr><th>选择规则</th><th>数学表达</th><th>适用场景</th></tr>
+<tr><td><strong>VIP 优先保障</strong><span class="tag tag-fix">推荐</span></td><td>选择 VIP_rate 最高的 Pareto 解，同时确保 Common_rate >= 底线</td><td>VIP 保障场景</td></tr>
+<tr><td><strong>底线保护</strong></td><td>如果 VIP 提升导致 Common 低于底线，选择最接近底线的 Pareto 解</td><td>高负载场景</td></tr>
+<tr><td><strong>均衡选择</strong></td><td>加权评分 = α × VIP_score + (1-α) × Common_score, α = 0.7</td><td>需要平衡的场景</td></tr>
+</table>
+
+<h3>3.4 其他转化方法对比</h3>
+<table>
+<tr><th>方法</th><th>数学形式</th><th>优点</th><th>缺点</th><th>适用场景</th></tr>
+<tr><td><strong>ε-约束法</strong><span class="tag tag-fix">推荐</span></td><td>max f₁, s.t. f₂>=ε</td><td>数学全局最优</td><td>大规模慢</td><td>离散小规模（当前场景）</td></tr>
+<tr><td>加权求和法</td><td>max w₁f₁+w₂f₂</td><td>实现简单</td><td>无法找到凹 Pareto 前沿</td><td>简单场景</td></tr>
+<tr><td>Lexicographic</td><td>先 max f₁, 再 max f₂</td><td>优先级明确</td><td>次目标可能被忽略</td><td>严格优先级</td></tr>
+<tr><td>目标约束法</td><td>max f₁, s.t. f₂>=T₂</td><td>灵活设定目标</td><td>目标值难确定</td><td>目标明确场景</td></tr>
+</table>
+</div>
+
+<!-- 第 4 章 -->
+<div class="section" id="ch4">
+<h2>4. 求解算法对比与选型</h2>
+<h3>4.1 5 种算法详细对比</h3>
+<table>
+<tr><th>算法</th><th>类型</th><th>最优性</th><th>速度</th><th>适用问题规模</th><th>实现复杂度</th><th>推荐度</th></tr>
+<tr><td><strong>ε-约束枚举法</strong></td><td>精确法</td><td><span class="tag tag-fix">数学全局最优</span></td><td>解空间小时极快</td><td>< 1000 组合</td><td>低</td><td>⭐⭐⭐⭐⭐</td></tr>
+<tr><td>加权求和法</td><td>精确法</td><td>凸 Pareto 前沿</td><td>快</td><td>任意</td><td>极低</td><td>⭐⭐⭐</td></tr>
+<tr><td>NSGA-II</td><td>启发式</td><td>近似最优</td><td>中等</td><td>大规模连续</td><td>高</td><td>⭐⭐⭐⭐</td></tr>
+<tr><td>MOEA/D</td><td>启发式</td><td>近似最优</td><td>中等</td><td>大规模连续</td><td>高</td><td>⭐⭐⭐</td></tr>
+<tr><td>SPEA2</td><td>启发式</td><td>近似最优</td><td>中等</td><td>中等规模</td><td>中高</td><td>⭐⭐⭐</td></tr>
+</table>
+
+<h3>4.2 为什么推荐 ε-约束枚举法？</h3>
+<div class="summary-box">
+<h4>选择理由</h4>
+<ol>
+<li><strong>问题规模小</strong>：4 模块 × 5 档位 = 625 种组合（可完全枚举）</li>
+<li><strong>需要最优性证明</strong>：启发式算法无法证明找到的是全局最优</li>
+<li><strong>离散问题</strong>：参数是离散档位（0/0.25/0.5/0.75/1.0），不适合连续优化算法</li>
+<li><strong>数学保证</strong>：最优性间隙 = 0.0000，可严格证明</li>
+<li><strong>实现简单</strong>：无需复杂进化操作，易于理解和验证</li>
+</ol>
+<p><strong>知识压缩后</strong>：625 → ~20 种，枚举速度 < 1ms</p>
+</div>
+
+<h3>4.3 大规模网络扩展方案</h3>
+<p>当小区数量 > 100 时的扩展策略：</p>
+<table>
+<tr><th>方案</th><th>原理</th><th>适用场景</th></tr>
+<tr><td><strong>方案 1：小区级并行 + 独立求解</strong></td><td>每个小区独立求解（解空间互不影响），并行执行，总时间 = max(单个小区求解时间)</td><td>小区间无耦合</td></tr>
+<tr><td><strong>方案 2：增量求解</strong></td><td>只重新求解状态变化的小区，其他小区复用上次最优解，减少 80%+ 求解量</td><td>状态缓慢变化</td></tr>
+<tr><td><strong>方案 3：区域级分组求解</strong></td><td>将相邻小区分组（同 PRB 资源池），组内联合优化，组间独立，平衡求解质量和速度</td><td>小区间有耦合</td></tr>
+</table>
+</div>
+
+<!-- 第 5 章 -->
+<div class="section" id="ch5">
+<h2>5. 求解引擎模块架构</h2>
+<h3>5.1 8 模块架构图</h3>
+<div style="background:#f8f9fa;border:2px solid #2c3e50;border-radius:10px;padding:20px;margin:16px 0;">
+  <div style="text-align:center;font-weight:700;color:#2c3e50;font-size:18px;margin-bottom:16px;">MultiObjectiveOptimizer（多目标优化器 - 核心入口）</div>
+  
+  <div style="display:grid;grid-template-columns:200px 1fr 200px;gap:12px;align-items:start;">
+    <!-- 输入层 -->
+    <div style="background:#fff;border:2px solid #3498db;border-radius:8px;padding:12px;">
+      <div style="font-weight:700;color:#3498db;margin-bottom:8px;font-size:14px;">输入层</div>
+      <div style="background:#f0f8ff;padding:8px;border-radius:4px;margin-bottom:6px;font-size:12px;">
+        <strong>CellState</strong><br>
+        <span style="color:#666;">site_name, cell_id, rat, vip_curr, vip_tgt, common_curr, common_min, prb_load, busy_hour</span>
+      </div>
+      <div style="background:#f0f8ff;padding:8px;border-radius:4px;font-size:12px;">
+        <strong>HistoryData (optional)</strong><br>
+        <span style="color:#666;">历史策略数据，用于知识压缩</span>
+      </div>
+    </div>
+    
+    <!-- 处理层 -->
+    <div style="background:#fff;border:2px solid #27ae60;border-radius:8px;padding:12px;">
+      <div style="font-weight:700;color:#27ae60;margin-bottom:8px;font-size:14px;">处理层（6 个核心子模块）</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+        <div style="background:#fff5f5;border:1px solid #e74c3c;padding:8px;border-radius:6px;font-size:11px;">
+          <div style="font-weight:600;color:#e74c3c;">1. StrategyPreFilter</div>
+          <div style="color:#666;margin-top:2px;">策略预过滤器</div>
+        </div>
+        <div style="background:#fff5f5;border:1px solid #f39c12;padding:8px;border-radius:6px;font-size:11px;">
+          <div style="font-weight:600;color:#f39c12;">2. DynamicParamBounds</div>
+          <div style="color:#666;margin-top:2px;">动态参数边界</div>
+        </div>
+        <div style="background:#f0fff4;border:1px solid #27ae60;padding:8px;border-radius:6px;font-size:11px;">
+          <div style="font-weight:600;color:#27ae60;">3. ProgressiveCompressor</div>
+          <div style="color:#666;margin-top:2px;">渐进式压缩器</div>
+        </div>
+        <div style="background:#f0fff4;border:1px solid #2ecc71;padding:8px;border-radius:6px;font-size:11px;">
+          <div style="font-weight:600;color:#2ecc71;">4. GainModel</div>
+          <div style="color:#666;margin-top:2px;">增益预测模型</div>
+        </div>
+        <div style="background:#f0f8ff;border:1px solid #3498db;padding:8px;border-radius:6px;font-size:11px;">
+          <div style="font-weight:600;color:#3498db;">5. EpsilonConstraintSolver</div>
+          <div style="color:#666;margin-top:2px;">ε-约束求解器</div>
+        </div>
+        <div style="background:#f0f8ff;border:1px solid #9b59b6;padding:8px;border-radius:6px;font-size:11px;">
+          <div style="font-weight:600;color:#9b59b6;">6. CommonRateEstimator</div>
+          <div style="color:#666;margin-top:2px;">普通用户指标估算</div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 输出层 -->
+    <div style="background:#fff;border:2px solid #9b59b6;border-radius:8px;padding:12px;">
+      <div style="font-weight:700;color:#9b59b6;margin-bottom:8px;font-size:14px;">输出层</div>
+      <div style="background:#faf0ff;padding:8px;border-radius:4px;font-size:11px;">
+        <strong>OptimizationResult</strong><br>
+        <span style="color:#666;">- best_modules, best_params<br>- vip_predicted, common_predicted<br>- pareto_front, optimality_gap<br>- vip_evaluate_result, common_evaluate_result<br>- needs_adjustment, adjustment_direction</span>
+      </div>
+    </div>
+  </div>
+  
+  <div style="text-align:center;margin-top:12px;color:#7f8c8d;font-size:12px;">
+    ─── 数据流：输入层 → 处理层 → 输出层 ───
+  </div>
+</div>
+
+<h3>5.2 模块职责与依赖关系</h3>
+<table>
+<tr><th>模块</th><th>职责</th><th>输入</th><th>输出</th></tr>
+<tr><td><strong>StrategyPreFilter</strong><span class="tag tag-new">新增</span></td><td>对齐 LTE/NR 初始规划规则，过滤非法策略组合</td><td>CellState</td><td>合法模块组合列表</td></tr>
+<tr><td><strong>DynamicParamBounds</strong><span class="tag tag-new">新增</span></td><td>动态计算参数边界，替代固定值</td><td>CellState</td><td>各模块 left_bound/right_bound</td></tr>
+<tr><td><strong>ProgressiveCompressor</strong><span class="tag tag-new">新增</span></td><td>根据差距比例压缩解空间，对齐现有渐进式调整逻辑</td><td>CellState, current_params, gap</td><td>压缩后的模块列表 + 参数范围</td></tr>
+<tr><td><strong>GainModel</strong></td><td>策略→效果映射，预测 VIP/Common 速率增益</td><td>CellState, ModuleConfig</td><td>PredictedRates(vip_predicted, common_predicted)</td></tr>
+<tr><td><strong>EpsilonConstraintSolver</strong></td><td>ε-约束枚举，数学保证全局最优</td><td>CellState, CompressedSpace, ε</td><td>ParetoFront</td></tr>
+<tr><td><strong>CommonRateEstimator</strong><span class="tag tag-new">新增</span></td><td>估算普通用户速率，补全指标获取路径</td><td>CellState</td><td>common_curr_rate, common_min_rate</td></tr>
+<tr><td><strong>EvaluationAligner</strong><span class="tag tag-new">新增</span></td><td>求解器输出增加 20% 阈值评估字段</td><td>OptimizationResult</td><td>OptimizationResult + evaluate_result</td></tr>
+</table>
+</div>
+
+
+<h3>5.3 核心模块详细设计</h3>
+
+<h4>5.3.1 StrategyPreFilter（策略预过滤器）</h4>
+<p><strong>职责</strong>：根据现有代码规则，过滤非法策略组合，确保求解器只在合法策略空间搜索。</p>
+<div class="module-box">
+<h4>核心逻辑</h4>
+<table>
+<tr><th>条件</th><th>策略选择</th></tr>
+<tr><td>LTE 初始规划</td><td>BEGBR + DACQ（提+限），用户数 > 最大可保障用户数</td></tr>
+<tr><td>NR 初始规划</td><td>FWA（仅提）</td></tr>
+<tr><td>后续调整（LTE）</td><td>可组合使用 BEGBR + DACQ，遵循"提>限>拒"优先级</td></tr>
+<tr><td>后续调整（NR）</td><td>可组合使用 FWA + RRC，遵循"提>限>拒"优先级</td></tr>
+</table>
+</div>
+<div class="code-block">
+class StrategyPreFilter:
+    def filter_valid_strategies(self, cell: CellState) -> List[List[str]]:
+        """根据 RAT 类型和初始规划状态，返回合法策略组合"""
+        if cell.rat == "LTE":
+            if cell.is_first_time_setup:
+                return [["BEGBR", "DACQ"]]  # LTE 初始规划
+            else:
+                return [["BEGBR"], ["DACQ"], ["BEGBR", "DACQ"]]  # 后续调整
+        elif cell.rat == "NR":
+            if cell.is_first_time_setup:
+                return [["FWA"]]  # NR 初始规划
+            else:
+                return [["FWA"], ["RRC"], ["FWA", "RRC"]]  # 后续调整
+        return []
+</div>
+
+<h4>5.3.2 DynamicParamBounds（动态参数边界）</h4>
+<p><strong>职责</strong>：根据 VIP 目标速率动态计算各模块参数边界，替代固定值。</p>
+<div class="code-block">
+class DynamicParamBounds:
+    def calculate_begbr_bounds(self, cell):
+        """BEGBR 边界：left=VIP LTE 目标, right=2倍目标"""
+        target_kbps = cell.vip_target_rate * 1000
+        return {
+            "left_bound": target_kbps,
+            "right_bound": target_kbps * 2,
+            "default": target_kbps
+        }
+    
+    def calculate_fwa_bounds(self, cell):
+        """FWA 边界：left=VIP NR 目标, right=2倍目标"""
+        target_kbps = cell.vip_target_rate * 1000
+        return {
+            "left_bound": target_kbps,
+            "right_bound": target_kbps * 2,
+            "default": target_kbps
+        }
+    
+    def calculate_dacq_bounds(self):
+        """DACQ 边界：固定值 3000000-5000000"""
+        return {"left_bound": 3000000, "right_bound": 5000000, "default": 5000000}
+    
+    def calculate_rrc_bounds(self):
+        """RRC 边界：固定值 10-100"""
+        return {"left_bound": 10, "right_bound": 100, "default": 100}
+    
+    def generate_discrete_levels(self, left_bound, right_bound, levels=5):
+        """生成离散档位"""
+        step = (right_bound - left_bound) / (levels - 1)
+        return [round(left_bound + i * step) for i in range(levels)]
+</div>
+
+<h4>5.3.3 ProgressiveCompressor（渐进式压缩器）</h4>
+<p><strong>职责</strong>：根据差距比例压缩解空间，对齐现有代码的渐进式调整逻辑。</p>
+<div class="module-box">
+<h4>压缩规则</h4>
+<table>
+<tr><th>场景</th><th>压缩策略</th><th>解空间大小</th></tr>
+<tr><td>初次规划</td><td>只枚举默认值档位</td><td>1 种组合</td></tr>
+<tr><td>差距 > 30%</td><td>枚举所有 5 档位</td><td>5^n 种组合</td></tr>
+<tr><td>差距 < 30%</td><td>只枚举相邻档位（±1 档）</td><td>3^n 种组合</td></tr>
+</table>
+</div>
+<div class="code-block">
+class ProgressiveCompressor:
+    def compress_solution_space(self, cell, current_params, gap_percentage):
+        """根据差距比例压缩解空间"""
+        if cell.is_first_time_setup:
+            return self._get_default_params(cell)
+        elif gap_percentage > 30:
+            return self._enumerate_all_levels(cell)
+        else:
+            return self._enumerate_adjacent_levels(cell, current_params)
+    
+    def _get_default_params(self, cell):
+        """初次规划 - 只使用默认值"""
+        bounds = DynamicParamBounds().get_all_bounds(cell)
+        return {module: bounds[module]["default"] for module in cell.modules}
+    
+    def _enumerate_all_levels(self, cell):
+        """差距 > 30% - 枚举所有档位"""
+        bounds = DynamicParamBounds().get_all_bounds(cell)
+        levels = {}
+        for module in cell.modules:
+            levels[module] = DynamicParamBounds().generate_discrete_levels(
+                bounds[module]["left_bound"], bounds[module]["right_bound"], 5
+            )
+        return levels
+    
+    def _enumerate_adjacent_levels(self, cell, current_params):
+        """差距 < 30% - 只枚举相邻档位（±1）"""
+        bounds = DynamicParamBounds().get_all_bounds(cell)
+        adjacent_params = {}
+        for module, current_value in current_params.items():
+            all_levels = DynamicParamBounds().generate_discrete_levels(
+                bounds[module]["left_bound"], bounds[module]["right_bound"], 5
+            )
+            current_level_idx = self._find_closest_level(all_levels, current_value)
+            adjacent_indices = [
+                max(0, current_level_idx - 1),
+                current_level_idx,
+                min(4, current_level_idx + 1)
+            ]
+            adjacent_params[module] = [all_levels[i] for i in adjacent_indices]
+        return adjacent_params
+</div>
+
+<h4>5.3.4 GainModel（增益预测模型）</h4>
+<p><strong>职责</strong>：预测策略调整后的 VIP 和普通用户速率增益。</p>
+<div class="code-block">
+class GainModel:
+    def predict_vip_gain(self, cell, module, param_value):
+        """预测 VIP 速率增益（基于经验公式）"""
+        if module == "BEGBR":
+            # BEGBR 提升：VIP 速率提升约 20%-40%
+            return cell.vip_curr_rate * (1.2 + 0.2 * (param_value - cell.vip_target_rate * 1000) / 1000)
+        elif module == "FWA":
+            # FWA 提升：VIP 速率提升约 15%-35%
+            return cell.vip_curr_rate * (1.15 + 0.2 * (param_value - cell.vip_target_rate * 1000) / 1000)
+        elif module == "DACQ":
+            # DACQ 限制：间接提升 VIP 速率 5%-15%
+            return cell.vip_curr_rate * 1.1
+        return cell.vip_curr_rate
+    
+    def predict_common_impact(self, cell, module, param_value):
+        """预测普通用户速率影响"""
+        if module in ["BEGBR", "FWA"]:
+            # 提升类策略：普通用户速率下降 5%-15%
+            return cell.common_curr_rate * 0.9
+        elif module == "DACQ":
+            # 限制类策略：普通用户速率下降 10%-25%
+            return cell.common_curr_rate * 0.85
+        elif module == "RRC":
+            # RRC 限制：普通用户速率下降 15%-30%
+            return cell.common_curr_rate * 0.8
+        return cell.common_curr_rate
+</div>
+
+<h4>5.3.5 EpsilonConstraintSolver（ε-约束求解器）</h4>
+<p><strong>职责</strong>：执行 ε-约束枚举，数学保证全局最优。</p>
+<div class="code-block">
+class EpsilonConstraintSolver:
+    def solve(self, cell, compressed_space, epsilon):
+        """ε-约束枚举求解"""
+        best_solution = None
+        best_vip_rate = -1
+        
+        # 枚举所有压缩后的参数组合
+        for combo in self._enumerate_combinations(compressed_space):
+            vip_rate = self._calculate_vip_rate(cell, combo)
+            common_rate = self._calculate_common_rate(cell, combo)
+            
+            # 检查普通用户约束
+            if common_rate >= epsilon:
+                if vip_rate > best_vip_rate:
+                    best_vip_rate = vip_rate
+                    best_solution = {
+                        "modules": combo["modules"],
+                        "params": combo["params"],
+                        "vip_rate": vip_rate,
+                        "common_rate": common_rate
+                    }
+        
+        return best_solution
+    
+    def _enumerate_combinations(self, space):
+        """笛卡尔积枚举所有参数组合"""
+        # 实现略...
+        pass
+</div>
+
+<h4>5.3.6 CommonRateEstimator（普通用户指标估算）</h4>
+<p><strong>职责</strong>：补全现有代码缺失的普通用户速率获取路径。</p>
+<div class="code-block">
+class CommonRateEstimator:
+    def estimate_common_rate(self, cell):
+        """估算普通用户速率（基于 PRB 反推）"""
+        # 估算公式：
+        # Common_rate = (Total_PRB_capacity - VIP_rate * VIP_users) / Common_users
+        prb_total = 100  # 假设 PRB 总量
+        spectral_efficiency = 5.0  # bps/Hz/PRB（经验值）
+        
+        total_capacity = cell.prb_load * prb_total * spectral_efficiency
+        vip_consumption = cell.vip_curr_rate * cell.vip_user_count
+        
+        estimated_common_users = cell.estimated_common_user_count
+        if estimated_common_users > 0:
+            common_rate = (total_capacity - vip_consumption) / estimated_common_users
+            return max(0, common_rate)
+        else:
+            return 0.0
+    
+    def calculate_common_min_rate(self, cell):
+        """计算普通用户最低可接受速率"""
+        return cell.vip_target_rate * 0.3  # 经验公式：VIP 目标的 30%
+</div>
+
+<h4>5.3.7 EvaluationAligner（评估对齐器）</h4>
+<p><strong>职责</strong>：求解器输出增加 20% 阈值评估字段，与现有代码评估规则对齐。</p>
+<div class="code-block">
+class EvaluationAligner:
+    def calculate_evaluate_result(self, current_rate, target_rate):
+        """计算评估结果 - 与现有代码完全对齐"""
+        percentage_diff = abs(current_rate - target_rate) / target_rate
+        percentage_diff = round(percentage_diff, 3)
+        
+        if percentage_diff <= 0.2:
+            return "AchievedTarget"
+        elif current_rate > target_rate:
+            return "ExceedTarget"
+        else:
+            return "NotAchievedTarget"
+    
+    def align_result(self, result: OptimizationResult) -> OptimizationResult:
+        """对齐求解器输出，增加评估字段"""
+        result.vip_percentage_diff = abs(result.vip_predicted - result.cell.vip_tgt_rate) / result.cell.vip_tgt_rate
+        result.vip_evaluate_result = self.calculate_evaluate_result(result.vip_predicted, result.cell.vip_tgt_rate)
+        
+        result.common_percentage_diff = abs(result.common_predicted - result.cell.common_min_rate) / result.cell.common_min_rate
+        result.common_evaluate_result = self.calculate_evaluate_result(result.common_predicted, result.cell.common_min_rate)
+        
+        result.needs_adjustment = result.vip_evaluate_result != "AchievedTarget"
+        if result.vip_evaluate_result == "ExceedTarget":
+            result.adjustment_direction = "decrease"
+        elif result.vip_evaluate_result == "NotAchievedTarget":
+            result.adjustment_direction = "increase"
+        else:
+            result.adjustment_direction = "none"
+        
+        return result
+</div>
+<!-- 第 6 章 -->
+<div class="section" id="ch6">
+<h2>6. 参数边界动态计算</h2>
+<h3>6.1 现有代码动态定义</h3>
+<div class="comparison">
+<div class="comparison-box correct">
+<h4>[正确] 现有代码动态定义</h4>
+<table>
+<tr><th>模块</th><th>left_bound</th><th>right_bound</th><th>默认值</th></tr>
+<tr><td>BEGBR</td><td>VIP LTE 保障目标速率</td><td>2 倍目标速率</td><td>left_bound</td></tr>
+<tr><td>FWA</td><td>VIP NR 保障目标速率</td><td>2 倍目标速率</td><td>left_bound</td></tr>
+<tr><td>DACQ</td><td>3000000</td><td>5000000</td><td>5000000</td></tr>
+<tr><td>RRC</td><td>10 (res0_limit_num)</td><td>100</td><td>100</td></tr>
+</table>
+</div>
+<div class="comparison-box wrong">
+<h4>[错误] 固定值定义会导致非法参数</h4>
+<table>
+<tr><th>模块</th><th>left_bound</th><th>right_bound</th></tr>
+<tr><td>BEGBR</td><td>2000</td><td>10000</td></tr>
+<tr><td>FWA</td><td>未定义</td><td>未定义</td></tr>
+<tr><td>DACQ</td><td>未定义</td><td>未定义</td></tr>
+<tr><td>RRC</td><td>未定义</td><td>未定义</td></tr>
+</table>
+<p>风险：错误边界导致求解器生成<strong>非法 MML 参数</strong></p>
+</div>
+</div>
+
+<h3>6.2 动态参数边界计算代码</h3>
+<div class="code-block">
+class DynamicParamBounds:
+    """动态参数边界计算器"""
+    
+    def calculate_begbr_bounds(self, cell):
+        """BEGBR 参数边界动态计算"""
+        target_rate_kbps = cell.vip_target_rate * 1000  # Mbps → kbps
+        return {
+            "left_bound": target_rate_kbps,
+            "right_bound": target_rate_kbps * 2,
+            "default": target_rate_kbps
+        }
+    
+    def calculate_fwa_bounds(self, cell):
+        """FWA 参数边界动态计算"""
+        target_rate_kbps = cell.vip_target_rate * 1000
+        return {
+            "left_bound": target_rate_kbps,
+            "right_bound": target_rate_kbps * 2,
+            "default": target_rate_kbps
+        }
+    
+    def calculate_dacq_bounds(self):
+        """DACQ 参数边界（固定值）"""
+        return {"left_bound": 3000000, "right_bound": 5000000, "default": 5000000}
+    
+    def calculate_rrc_bounds(self):
+        """RRC 参数边界（固定值）"""
+        return {"left_bound": 10, "right_bound": 100, "default": 100}
+    
+    def generate_discrete_levels(self, left_bound, right_bound, levels=5):
+        """生成离散参数档位"""
+        step = (right_bound - left_bound) / (levels - 1)
+        return [round(left_bound + i * step) for i in range(levels)]
+    
+    def get_all_bounds(self, cell):
+        """获取所有模块的参数边界"""
+        bounds = {}
+        if cell.rat == "LTE" or "BEGBR" in cell.modules:
+            bounds["BEGBR"] = self.calculate_begbr_bounds(cell)
+        if cell.rat == "NR" or "FWA" in cell.modules:
+            bounds["FWA"] = self.calculate_fwa_bounds(cell)
+        if "DACQ" in cell.modules:
+            bounds["DACQ"] = self.calculate_dacq_bounds()
+        if "RRC" in cell.modules:
+            bounds["RRC"] = self.calculate_rrc_bounds()
+        return bounds
+</div>
+
+<h3>6.3 离散档位生成示例</h3>
+<div class="code-block">
+# 示例：某 LTE 小区 VIP 目标速率 = 5 Mbps
+cell.vip_target_rate = 5.0  # Mbps
+begbr_bounds = bounds_calculator.calculate_begbr_bounds(cell)
+# begbr_bounds = {"left": 5000, "right": 10000, "default": 5000}
+
+begbr_levels = bounds_calculator.generate_discrete_levels(5000, 10000, 5)
+# begbr_levels = [5000, 6250, 7500, 8750, 10000]
+
+# 示例：某 NR 小区 VIP 目标速率 = 10 Mbps
+cell.vip_target_rate = 10.0  # Mbps
+fwa_bounds = bounds_calculator.calculate_fwa_bounds(cell)
+# fwa_bounds = {"left": 10000, "right": 20000, "default": 10000}
+
+fwa_levels = bounds_calculator.generate_discrete_levels(10000, 20000, 5)
+# fwa_levels = [10000, 12500, 15000, 17500, 20000]
+</div>
+</div>
+
+
+<h3>6.5 策略选择逻辑补充 - LTE/NR 初始规划规则</h3>
+<div class="module-box">
+<h4>策略选择规则</h4>
+<table>
+<tr><th>RAT 类型</th><th>初始规划策略</th><th>后续调整策略</th></tr>
+<tr><td>LTE</td><td>BEGBR + DACQ（提+限），用户数 > 最大可保障用户数</td><td>可组合使用 BEGBR + DACQ，遵循"提>限>拒"优先级</td></tr>
+<tr><td>NR</td><td>FWA（仅提）</td><td>可组合使用 FWA + RRC，遵循"提>限>拒"优先级</td></tr>
+</table>
+</div>
+<div class="code-block">
+class StrategySelector:
+    def select_initial_strategy(self, cell: CellState) -> List[str]:
+        """根据 RAT 类型选择初始策略"""
+        if cell.rat == "LTE":
+            return ["BEGBR", "DACQ"]  # LTE 初始规划
+        elif cell.rat == "NR":
+            return ["FWA"]  # NR 初始规划
+        return []
+    
+    def select_adjustment_strategy(self, cell: CellState, current_strategy: List[str]) -> List[List[str]]:
+        """根据当前策略和 RAT 类型选择调整策略"""
+        if cell.rat == "LTE":
+            return [["BEGBR"], ["DACQ"], ["BEGBR", "DACQ"]]  # 后续调整
+        elif cell.rat == "NR":
+            return [["FWA"], ["RRC"], ["FWA", "RRC"]]  # 后续调整
+        return []
+</div>
+
+<h3>6.6 参数边界处理策略</h3>
+<div class="module-box">
+<h4>边界处理流程</h4>
+<ol>
+<li><strong>边界定义</strong>：根据 VIP 目标速率动态计算各模块参数边界</li>
+<li><strong>边界验证</strong>：求解器生成的参数值必须在 [left_bound, right_bound] 范围内</li>
+<li><strong>冲突处理</strong>：当多个模块边界冲突时，采用优先级策略（VIP 保障 > 普通用户保护 > 系统稳定性）</li>
+<li><strong>默认值回退</strong>：若求解失败，使用 default 值作为安全回退</li>
+</ol>
+</div>
+
+<h4>边界冲突处理策略</h4>
+<div class="comparison">
+<div class="comparison-box correct">
+<h4>[推荐] 动态边界计算</h4>
+<table>
+<tr><th>模块</th><th>left_bound</th><th>right_bound</th><th>默认值</th></tr>
+<tr><td>BEGBR</td><td>VIP LTE 保障目标速率</td><td>2 倍目标速率</td><td>left_bound</td></tr>
+<tr><td>FWA</td><td>VIP NR 保障目标速率</td><td>2 倍目标速率</td><td>left_bound</td></tr>
+<tr><td>DACQ</td><td>3000000</td><td>5000000</td><td>5000000</td></tr>
+<tr><td>RRC</td><td>10 (res0_limit_num)</td><td>100</td><td>100</td></tr>
+</table>
+</div>
+<div class="comparison-box wrong">
+<h4>[错误] 固定值定义会导致非法参数</h4>
+<table>
+<tr><th>模块</th><th>left_bound</th><th>right_bound</th></tr>
+<tr><td>BEGBR</td><td>2000</td><td>10000</td></tr>
+<tr><td>FWA</td><td>未定义</td><td>未定义</td></tr>
+<tr><td>DACQ</td><td>未定义</td><td>未定义</td></tr>
+<tr><td>RRC</td><td>未定义</td><td>未定义</td></tr>
+</table>
+<p>风险：错误边界导致求解器生成<strong>非法 MML 参数</strong></p>
+</div>
+</div>
+
+<h3>6.7 与求解器融合</h3>
+<div class="module-box">
+<h4>融合架构</h4>
+<p>将策略选择逻辑和参数边界处理策略与求解器深度融合，确保求解器在合法策略空间和参数边界内搜索。</p>
+</div>
+<div class="code-block">
+class SolverIntegrator:
+    def integrate_solver_with_strategy(self, cell: CellState, solver: MultiObjectiveOptimizer):
+        """将求解器与策略选择逻辑和参数边界处理策略融合"""
+        # 1. 策略预过滤
+        valid_strategies = StrategySelector().select_initial_strategy(cell)
+        
+        # 2. 动态参数边界计算
+        bounds = DynamicParamBounds().get_all_bounds(cell)
+        
+        # 3. 解空间压缩
+        compressed_space = ProgressiveCompressor().compress_solution_space(cell, bounds)
+        
+        # 4. 调用求解器
+        result = solver.solve(cell, valid_strategies, compressed_space)
+        
+        # 5. 边界验证
+        if not self._validate_bounds(result, bounds):
+            # 边界验证失败，使用默认值回退
+            result = self._fallback_to_default(result, bounds)
+        
+        # 6. 评估对齐
+        result = EvaluationAligner().align_result(result)
+        
+        return result
+    
+    def _validate_bounds(self, result, bounds):
+        """验证求解结果是否在参数边界内"""
+        for module, param_value in result.params.items():
+            if module in bounds:
+                if param_value < bounds[module]["left_bound"] or param_value > bounds[module]["right_bound"]:
+                    return False
+        return True
+    
+    def _fallback_to_default(self, result, bounds):
+        """边界验证失败时的默认值回退"""
+        for module in result.params:
+            if module in bounds:
+                result.params[module] = bounds[module]["default"]
+        return result
+</div>
+
+<h3>6.8 评估规则集成 - 20% 阈值对齐</h3>
+<div class="module-box">
+<h4>评估规则对齐</h4>
+<p>将求解器输出与现有代码的评估规则（20% 阈值）对齐，确保求解器输出可以直接用于 AgentLoop 的决策逻辑。</p>
+</div>
+<div class="code-block">
+class EvaluationAligner:
+    def calculate_evaluate_result(self, current_rate, target_rate):
+        """计算评估结果 - 与现有代码完全对齐"""
+        percentage_diff = abs(current_rate - target_rate) / target_rate
+        percentage_diff = round(percentage_diff, 3)
+        
+        if percentage_diff <= 0.2:
+            return "AchievedTarget"
+        elif current_rate > target_rate:
+            return "ExceedTarget"
+        else:
+            return "NotAchievedTarget"
+    
+    def align_result(self, result: OptimizationResult) -> OptimizationResult:
+        """对齐求解器输出，增加评估字段"""
+        result.vip_percentage_diff = abs(result.vip_predicted - result.cell.vip_tgt_rate) / result.cell.vip_tgt_rate
+        result.vip_evaluate_result = self.calculate_evaluate_result(result.vip_predicted, result.cell.vip_tgt_rate)
+        
+        result.common_percentage_diff = abs(result.common_predicted - result.cell.common_min_rate) / result.cell.common_min_rate
+        result.common_evaluate_result = self.calculate_evaluate_result(result.common_predicted, result.cell.common_min_rate)
+        
+        result.needs_adjustment = result.vip_evaluate_result != "AchievedTarget"
+        if result.vip_evaluate_result == "ExceedTarget":
+            result.adjustment_direction = "decrease"
+        elif result.vip_evaluate_result == "NotAchievedTarget":
+            result.adjustment_direction = "increase"
+        else:
+            result.adjustment_direction = "none"
+        
+        return result
+</div>
+
+<h3>6.9 闭环控制逻辑</h3>
+<div class="module-box">
+<h4>闭环控制流程</h4>
+<p>将求解器与 AgentLoop 的闭环控制逻辑集成，实现自动参数调整和收敛。</p>
+</div>
+<div class="code-block">
+# AgentLoop 中的闭环控制逻辑
+def plan_loop(cell, max_iterations=5):
+    for iteration in range(max_iterations):
+        result = optimizer.solve(cell)
+        
+        if result.vip_evaluate_result == "AchievedTarget":
+            return result  # 达标，停止规划
+        
+        elif result.vip_evaluate_result == "ExceedTarget":
+            # 超标，减少保护级别
+            result = optimizer.solve(cell, direction="decrease")
+        
+        elif result.vip_evaluate_result == "NotAchievedTarget":
+            # 未达标，增加保护级别
+            result = optimizer.solve(cell, direction="increase")
+        
+        # 检查是否收敛
+        if result.needs_adjustment == False:
+            break
+    
+    return result  # 返回最优解
+</div>
+<!-- 第 7 章 -->
+<div class="section" id="ch7">
+<h2>7. 渐进式调整压缩器</h2>
+<h3>7.1 现有代码的参数调整规则</h3>
+<div class="code-block">
+# 现有代码的参数调整逻辑（policies-build SKILL.md）
+IF first_time_setup:
+    → 使用默认值（left_bound）
+ELSE IF gap > 30%:
+    → 激进调整（二分法）
+ELSE IF gap < 30%:
+    → 缓慢调整（固定步长 = 取值范围的 10%-30%）
+</div>
+
+<h3>7.2 渐进式压缩器设计</h3>
+<p>将渐进式调整逻辑映射到求解器的<strong>解空间压缩阶段</strong>：</p>
+<div class="flow">
+<div class="flow-box">初次规划</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">只枚举默认值档位</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">解空间 = 1 种组合</div>
+</div>
+<div class="flow">
+<div class="flow-box orange">差距 > 30%</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box orange">枚举所有 5 档位</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box orange">解空间 = 5^n 种组合</div>
+</div>
+<div class="flow">
+<div class="flow-box green">差距 < 30%</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box green">只枚举相邻档位（±1 档）</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box green">解空间 = 3^n 种组合</div>
+</div>
+
+<h3>7.3 代码实现</h3>
+<div class="code-block">
+class ProgressiveAdjustmentCompressor:
+    """渐进式调整压缩器"""
+    
+    def compress_solution_space(self, cell, current_params, gap_percentage):
+        """根据差距比例，压缩参数枚举空间"""
+        if cell.is_first_time_setup:
+            return self._get_default_params(cell)
+        elif gap_percentage > 30:
+            return self._enumerate_all_levels(cell)
+        else:
+            return self._enumerate_adjacent_levels(cell, current_params)
+    
+    def _get_default_params(self, cell):
+        """初次规划 - 只使用默认值"""
+        bounds = DynamicParamBounds().get_all_bounds(cell)
+        return {module: bounds[module]["default"] for module in cell.modules}
+    
+    def _enumerate_all_levels(self, cell):
+        """差距 > 30% - 枚举所有档位"""
+        bounds = DynamicParamBounds().get_all_bounds(cell)
+        levels = {}
+        for module in cell.modules:
+            levels[module] = DynamicParamBounds().generate_discrete_levels(
+                bounds[module]["left_bound"], bounds[module]["right_bound"], 5
+            )
+        return levels
+    
+    def _enumerate_adjacent_levels(self, cell, current_params):
+        """差距 < 30% - 只枚举相邻档位（±1）"""
+        bounds = DynamicParamBounds().get_all_bounds(cell)
+        adjacent_params = {}
+        for module, current_value in current_params.items():
+            all_levels = DynamicParamBounds().generate_discrete_levels(
+                bounds[module]["left_bound"], bounds[module]["right_bound"], 5
+            )
+            current_level_idx = self._find_closest_level(all_levels, current_value)
+            adjacent_indices = [
+                max(0, current_level_idx - 1),
+                current_level_idx,
+                min(4, current_level_idx + 1)
+            ]
+            adjacent_params[module] = [all_levels[i] for i in adjacent_indices]
+        return adjacent_params
+    
+    def _find_closest_level(self, levels, value):
+        """找到最接近当前值的档位索引"""
+        min_diff = float('inf')
+        closest_idx = 0
+        for i, level in enumerate(levels):
+            diff = abs(level - value)
+            if diff < min_diff:
+                min_diff = diff
+                closest_idx = i
+        return closest_idx
+</div>
+
+<h3>7.4 解空间压缩比计算</h3>
+<table>
+<tr><th>场景</th><th>模块数</th><th>原始解空间</th><th>压缩后解空间</th><th>压缩比</th></tr>
+<tr><td>初次规划</td><td>2</td><td>5² = 25</td><td>1</td><td>25x</td></tr>
+<tr><td>差距 > 30%</td><td>2</td><td>5² = 25</td><td>25</td><td>1x（不压缩）</td></tr>
+<tr><td>差距 < 30%</td><td>2</td><td>5² = 25</td><td>3² = 9</td><td>2.8x</td></tr>
+<tr><td>差距 > 30% + 知识压缩</td><td>4</td><td>5⁴ = 625</td><td>~20</td><td>31x</td></tr>
+</table>
+</div>
+
+<!-- 第 8 章 -->
+<div class="section" id="ch8">
+<h2>8. 普通用户指标获取方案</h2>
+<h3>8.1 问题描述</h3>
+<p>现有代码<strong>只查询 VIP 用户指标</strong>（evaluate SKILL.md 明确禁止查询 PRB 和 UserNumber）。</p>
+<p>但多目标求解需要 <code>Common_curr_rate</code> 作为约束条件，<strong>该指标目前无查询工具</strong>。</p>
+
+<h3>8.2 三条获取路径对比</h3>
+<table>
+<tr><th>路径</th><th>实现难度</th><th>准确度</th><th>推荐度</th><th>适用阶段</th></tr>
+<tr><td><strong>路径 1：PRB 负载反推</strong><br>通过小区 PRB 负载和 VIP 用户数反推普通用户速率</td><td>中</td><td>中（估算）</td><td>⭐⭐⭐⭐</td><td>短期（1-2 周）</td></tr>
+<tr><td><strong>路径 2：新增查询工具</strong><br>开发 CommonUserRateQuery 工具，直接查询普通用户速率</td><td>高</td><td>高（精确）</td><td>⭐⭐⭐⭐⭐</td><td>长期（1-2 月）</td></tr>
+<tr><td><strong>路径 3：经验公式估算</strong><br>基于历史数据建立 VIP/Common 速率相关性模型</td><td>低</td><td>低（经验）</td><td>⭐⭐</td><td>降级方案</td></tr>
+</table>
+
+<h3>8.3 路径 1 实现（短期推荐）</h3>
+<div class="code-block">
+class CommonRateEstimator:
+    """普通用户速率估算器"""
+    
+    def estimate_common_rate(self, cell):
+        """
+        估算公式：
+        Common_rate = (Total_PRB_capacity - VIP_rate * VIP_users) / Common_users
+        
+        其中：
+        - Total_PRB_capacity = PRB_load * PRB_total * spectral_efficiency
+        - VIP_rate = cell.vip_curr_rate
+        - VIP_users = cell.vip_user_count
+        - Common_users = 估算值（基于历史平均值）
+        """
+        prb_total = 100  # 假设 PRB 总量
+        spectral_efficiency = 5.0  # bps/Hz/PRB（经验值）
+        
+        total_capacity = cell.prb_load * prb_total * spectral_efficiency
+        vip_consumption = cell.vip_curr_rate * cell.vip_user_count
+        
+        estimated_common_users = cell.estimated_common_user_count
+        if estimated_common_users > 0:
+            common_rate = (total_capacity - vip_consumption) / estimated_common_users
+            return max(0, common_rate)
+        else:
+            return 0.0
+    
+    def calculate_common_min_rate(self, cell):
+        """计算普通用户最低可接受速率"""
+        return cell.vip_target_rate * 0.3  # 经验公式
+</div>
+
+<h3>8.4 降级策略</h3>
+<p>如果普通用户指标<strong>完全无法获取</strong>，求解器降级为<strong>单目标优化</strong>：</p>
+<div class="code-block">
+class DegradedSingleObjectiveSolver:
+    """降级求解器 - 仅优化 VIP 速率"""
+    
+    def solve(self, cell):
+        # 只优化 VIP 速率，忽略普通用户约束
+        maximize VIP_rate(x)
+        subject to: x ∈ X (可行域)
+        
+        # 增加安全约束：PRB 负载 < 95%（防止小区拥塞）
+        if cell.prb_load > 0.95:
+            return self._conservative_solution(cell)
+</div>
+</div>
+
+<!-- 第 9 章 -->
+<div class="section" id="ch9">
+<h2>9. 评估规则对齐与闭环控制</h2>
+<h3>9.1 现有评估规则</h3>
+<div class="code-block">
+percentage_diff = abs(Current - Target) / Target
+Round to 3 decimal places
+
+Decision Rules:
+- percentage_diff <= 0.2 → "AchievedTarget"
+- percentage_diff > 0.2 AND Current > Target → "ExceedTarget"
+- percentage_diff > 0.2 AND Current < Target → "NotAchievedTarget"
+</div>
+
+<h3>9.2 求解器输出增加评估字段</h3>
+<div class="code-block">
+@dataclass
+class OptimizationResult:
+    # 原有字段
+    best_modules: List[str]
+    best_params: Dict[str, Dict[str, Any]]
+    vip_predicted: float
+    common_predicted: float
+    pareto_front: List[Dict]
+    optimality_gap: float
+    
+    # 新增：评估规则对齐字段
+    vip_percentage_diff: float       # VIP 差距百分比
+    vip_evaluate_result: str         # "AchievedTarget" / "ExceedTarget" / "NotAchievedTarget"
+    common_percentage_diff: float    # 普通用户差距百分比
+    common_evaluate_result: str      # 同上
+    needs_adjustment: bool           # 是否需要继续调整
+    adjustment_direction: str        # "increase" / "decrease" / "none"
+    
+    def calculate_evaluate_result(self, current_rate, target_rate):
+        """计算评估结果 - 与现有代码完全对齐"""
+        percentage_diff = abs(current_rate - target_rate) / target_rate
+        percentage_diff = round(percentage_diff, 3)
+        
+        if percentage_diff <= 0.2:
+            return "AchievedTarget"
+        elif current_rate > target_rate:
+            return "ExceedTarget"
+        else:
+            return "NotAchievedTarget"
+</div>
+
+<h3>9.3 与 AgentLoop 的交互流程</h3>
+<div class="flow">
+<div class="flow-box">求解器输出 OptimizationResult</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">检查 vip_evaluate_result</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">AchievedTarget？</div>
+</div>
+<div class="flow">
+<div class="flow-box green">是 → 停止规划，执行 MML</div>
+</div>
+<div class="flow">
+<div class="flow-box red">否 → 根据 adjustment_direction 调整参数，重新求解</div>
+</div>
+
+<h3>9.4 闭环控制逻辑</h3>
+<div class="code-block">
+# AgentLoop 中的闭环控制逻辑
+def plan_loop(cell, max_iterations=5):
+    for iteration in range(max_iterations):
+        result = optimizer.solve(cell)
+        
+        if result.vip_evaluate_result == "AchievedTarget":
+            return result  # 达标，停止规划
+        
+        elif result.vip_evaluate_result == "ExceedTarget":
+            # 超标，减少保护级别
+            result = optimizer.solve(cell, direction="decrease")
+        
+        elif result.vip_evaluate_result == "NotAchievedTarget":
+            # 未达标，增加保护级别
+            result = optimizer.solve(cell, direction="increase")
+        
+        # 检查是否收敛
+        if result.needs_adjustment == False:
+            break
+    
+    return result  # 返回最优解
+</div>
+</div>
+
+<!-- 第 10 章 -->
+<div class="section" id="ch10">
+<h2>10. 完整数据流与执行时序</h2>
+<h3>10.1 求解引擎内部时序</h3>
+<div class="mermaid">
+sequenceDiagram
+    participant Main as MultiObjectiveOptimizer
+    participant SPF as StrategyPreFilter
+    participant DPB as DynamicParamBounds
+    participant PC as ProgressiveCompressor
+    participant CRE as CommonRateEstimator
+    participant ECS as EpsilonConstraintSolver
+    participant EA as EvaluationAligner
+
+    Note over Main, EA: 求解引擎内部执行时序（总计 < 10ms）
+    
+    Main->>Main: 1. 接收 CellState 输入<br>< 1ms
+    Main->>SPF: 2. 过滤合法策略组合<br>< 1ms
+    SPF-->>Main: 返回合法模块列表
+    Main->>DPB: 3. 计算动态参数边界<br>< 1ms
+    DPB-->>Main: 返回各模块 left/right bound
+    Main->>PC: 4. 压缩解空间<br>< 1ms
+    PC-->>Main: 返回压缩后模块+参数范围
+    Main->>CRE: 5. 估算普通用户速率<br>< 1ms
+    CRE-->>Main: 返回 common_curr_rate
+    Main->>ECS: 6. ε-约束枚举求解<br>< 5ms
+    ECS-->>Main: 返回 ParetoFront
+    Main->>EA: 7. 增加评估字段<br>< 1ms
+    EA-->>Main: 返回带评估结果的结果
+    Main->>Main: 8. 返回 OptimizationResult<br>< 1ms
+</div>
+
+<div class="summary-box">
+<h4>时序说明</h4>
+<table>
+<tr><th>步骤</th><th>模块</th><th>操作</th><th>时间</th></tr>
+<tr><td>1</td><td>MultiObjectiveOptimizer</td><td>接收 CellState 输入</td><td>< 1ms</td></tr>
+<tr><td>2</td><td>StrategyPreFilter</td><td>过滤合法策略组合</td><td>< 1ms</td></tr>
+<tr><td>3</td><td>DynamicParamBounds</td><td>计算动态参数边界</td><td>< 1ms</td></tr>
+<tr><td>4</td><td>ProgressiveCompressor</td><td>压缩解空间</td><td>< 1ms</td></tr>
+<tr><td>5</td><td>CommonRateEstimator</td><td>估算普通用户速率</td><td>< 1ms</td></tr>
+<tr><td>6</td><td>EpsilonConstraintSolver</td><td>ε-约束枚举求解</td><td>< 5ms</td></tr>
+<tr><td>7</td><td>EvaluationAligner</td><td>增加评估字段</td><td>< 1ms</td></tr>
+<tr><td>8</td><td>MultiObjectiveOptimizer</td><td>返回 OptimizationResult</td><td>< 1ms</td></tr>
+<tr><td><strong>总计</strong></td><td></td><td></td><td>< 10ms</td></tr>
+</table>
+</div>
+
+<h3>10.2 与 AgentLoop 交互时序</h3>
+<div class="mermaid">
+sequenceDiagram
+    participant AgentLoop
+    participant Evaluate as evaluate Skill
+    participant Plan as policies-plan Skill
+    participant Solver as 求解引擎
+    participant Build as policies-build Skill
+    participant Predict as policies-effect-predict
+    participant MML as MML 执行
+
+    AgentLoop->>Evaluate: Step 1: 查询 VIP 指标
+    Evaluate->>Evaluate: 评估是否达标
+    Evaluate-->>AgentLoop: 返回评估结果
+
+    alt 未达标/超标
+        AgentLoop->>Plan: Step 2: 调用求解器
+        Plan->>Solver: 传入 CellState + 目标参数
+        Solver->>Solver: 三层漏斗求解<br>(策略预过滤→动态边界→压缩→求解)
+        Solver-->>Plan: 返回 OptimizationResult<br>(最优策略 + Pareto 前沿 + 评估预判)
+        Plan->>Build: Step 3: 使用求解结果生成参数
+        Build->>Build: 生成 MML 参数
+        Build-->>AgentLoop: 返回 MML 参数
+        AgentLoop->>Predict: Step 4: 效果预测
+        Predict->>Predict: 预测调整后效果
+        Predict-->>AgentLoop: 返回 ISSUABLE/NOT_ISSUABLE
+
+        alt ISSUABLE
+            AgentLoop->>MML: Step 5: 执行 MML
+            MML-->>AgentLoop: 执行结果
+        else NOT_ISSUABLE
+            AgentLoop->>Plan: 调整参数，重新规划
+            Note over Plan: 进入下一轮迭代
+        end
+    else 已达标
+        AgentLoop->>AgentLoop: 停止规划，保持现状
+    end
+</div>
+
+<h3>10.3 数据流图</h3>
+<div class="flow">
+<div class="flow-box">CellState 输入</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">DynamicParamBounds 计算</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">StrategyPreFilter 过滤</div>
+</div>
+<div class="flow">
+<div class="flow-box">ProgressiveCompressor 压缩</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">EpsilonConstraintSolver 求解</div>
+<div class="flow-arrow">→</div>
+<div class="flow-box">EvaluationAligner 对齐</div>
+</div>
+<div class="flow">
+<div class="flow-box green">OptimizationResult 输出（含评估结果预判）</div>
+</div>
+</div>
+
+<!-- 第 11 章 -->
+<div class="section" id="ch11">
+<h2>11. 接口定义与数据类</h2>
+<h3>11.1 核心接口</h3>
+<div class="code-block">
+class MultiObjectiveOptimizer:
+    def solve(self, cell: CellState) -> OptimizationResult:
+        """核心求解接口"""
+        pass
+    
+    def _compress(self, cell: CellState, history: List[HistoryRecord]) -> CompressedSolutionSpace:
+        """解空间压缩"""
+        pass
+    
+    def _solve_epsilon(self, cell: CellState, epsilon: float) -> ParetoSolution:
+        """ε-约束求解"""
+        pass
+    
+    def _merge_pareto(self, fronts: List[ParetoFront]) -> MergedParetoFront:
+        """Pareto 前沿合并"""
+        pass
+    
+    def _select_best(self, cell: CellState, pareto_front: ParetoFront) -> OptimizationResult:
+        """选择最优解"""
+        pass
+
+class StrategyPreFilter:
+    def filter_valid_strategies(self, cell: CellState) -> List[List[str]]:
+        """过滤合法策略组合"""
+        pass
+
+class DynamicParamBounds:
+    def get_all_bounds(self, cell: CellState) -> Dict[str, Dict[str, float]]:
+        """获取所有模块参数边界"""
+        pass
+
+class CommonRateEstimator:
+    def estimate_common_rate(self, cell: CellState) -> float:
+        """估算普通用户速率"""
+        pass
+</div>
+
+<h3>11.2 数据类定义</h3>
+<div class="code-block">
+@dataclass
+class CellState:
+    site_name: str
+    cell_id: int
+    rat: str  # "LTE" or "NR"
+    vip_curr_rate: float
+    vip_tgt_rate: float
+    common_curr_rate: float  # 新增
+    common_min_rate: float   # 新增
+    prb_load: float
+    busy_hour: bool
+    vip_user_count: int = 0
+    common_user_count: int = 0
+    modules: List[str] = field(default_factory=list)  # 当前已规划模块
+    current_params: Dict[str, Any] = field(default_factory=dict)  # 当前参数值
+    is_first_time_setup: bool = False  # 新增
+    gap_percentage: float = 0.0  # 新增
+
+@dataclass
+class OptimizationResult:
+    cell_name: str
+    cell_id: int
+    best_modules: List[str]
+    best_params: Dict[str, Dict[str, Any]]
+    predicted_vip_rate: float
+    predicted_common_rate: float
+    vip_gap: float  # VIP 与目标的差距百分比
+    common_gap: float  # 普通用户与最小值的差距百分比
+    pareto_front: List[Dict] = field(default_factory=list)
+    interpretability_trace: str = ""
+    solve_time_ms: int = 0
+    method: str = ""  # "quant_solver" or "rule_fallback"
+    # 新增评估字段
+    vip_percentage_diff: float = 0.0
+    vip_evaluate_result: str = ""
+    common_percentage_diff: float = 0.0
+    common_evaluate_result: str = ""
+    needs_adjustment: bool = False
+    adjustment_direction: str = ""
+</div>
+</div>
+
+<!-- 第 12 章 -->
+<div class="section" id="ch12">
+<h2>12. 实施路线图与优先级</h2>
+<h3>12.1 优先级矩阵</h3>
+<table>
+<tr><th>优先级</th><th>修正项</th><th>工作量</th><th>风险</th><th>依赖</th></tr>
+<tr><td><span class="tag tag-error">P0</span></td><td>参数边界动态计算</td><td>1 天</td><td>高（错误边界导致非法参数）</td><td>无</td></tr>
+<tr><td><span class="tag tag-error">P0</span></td><td>策略预过滤器</td><td>1 天</td><td>高（生成非法策略组合）</td><td>无</td></tr>
+<tr><td><span class="tag tag-error">P0</span></td><td>普通用户指标获取路径</td><td>3 天</td><td>高（多目标求解无法执行）</td><td>无</td></tr>
+<tr><td><span class="tag tag-fix">P1</span></td><td>渐进式调整压缩器</td><td>2 天</td><td>中（影响求解效率）</td><td>P0 完成</td></tr>
+<tr><td><span class="tag tag-fix">P1</span></td><td>评估规则对齐</td><td>1 天</td><td>中（影响闭环控制）</td><td>P0 完成</td></tr>
+<tr><td><span class="tag tag-new">P2</span></td><td>大规模网络扩展</td><td>5 天</td><td>低（性能优化）</td><td>P1 完成</td></tr>
+</table>
+
+<h3>12.2 短期方案（1-2 周）</h3>
+<ol>
+<li>实现 <code>DynamicParamBounds</code> 和 <code>StrategyPreFilter</code>，确保求解器生成合法策略</li>
+<li>实现 <code>CommonRateEstimator</code>（路径 1：PRB 负载反推），提供普通用户指标估算</li>
+<li>集成 <code>EvaluationAligner</code>，使求解器输出与现有评估规则对齐</li>
+<li>集成到 <code>policies-plan</code> 和 <code>policies-build</code> Skill，替换现有规则逻辑</li>
+</ol>
+
+<h3>12.3 长期方案（1-2 月）</h3>
+<ol>
+<li>开发 <code>CommonUserRateQuery</code> 工具，直接查询普通用户速率</li>
+<li>实现 <code>ProgressiveAdjustmentCompressor</code>，对齐现有渐进式调整逻辑</li>
+<li>优化 <code>GainModel</code>，基于历史数据训练更精准的增益预测模型</li>
+<li>实现大规模网络扩展（小区级并行 + 增量求解 + 区域分组求解）</li>
+</ol>
+
+<h3>12.4 回滚降级策略</h3>
+<p>如果求解器集成遇到问题，可快速回滚到现有规则方案：</p>
+<div class="code-block">
+# 回滚开关
+USE_QUANT_SOLVER = False  # 设为 False 回滚到现有规则方案
+
+def plan_policies(cell):
+    if USE_QUANT_SOLVER:
+        return quant_optimizer.solve(cell)
+    else:
+        return existing_rule_planner.plan(cell)  # 现有规则方案
+</div>
+</div>
+
+<!-- 第 13 章 -->
+<div class="section" id="ch13">
+<h2>13. 测试验证方案</h2>
+<h3>13.1 单元测试</h3>
+<table>
+<tr><th>测试用例</th><th>测试目标</th><th>预期结果</th></tr>
+<tr><td>test_dynamic_param_bounds</td><td>动态参数边界计算</td><td>BEGBR left=VIP 目标速率，right=2 倍</td></tr>
+<tr><td>test_strategy_pre_filter_lte</td><td>LTE 策略过滤</td><td>返回 ["BEGBR", "DACQ"]</td></tr>
+<tr><td>test_strategy_pre_filter_nr</td><td>NR 策略过滤</td><td>返回 ["FWA"]</td></tr>
+<tr><td>test_progressive_compressor_first_time</td><td>初次规划压缩</td><td>解空间 = 1 种组合</td></tr>
+<tr><td>test_progressive_compressor_large_gap</td><td>大差距压缩</td><td>解空间 = 5^n 种组合</td></tr>
+<tr><td>test_epsilon_constraint_solver</td><td>ε-约束求解</td><td>返回 Pareto 前沿，最优性间隙 = 0</td></tr>
+<tr><td>test_common_rate_estimator</td><td>普通用户速率估算</td><td>估算值 > 0</td></tr>
+<tr><td>test_evaluation_aligner</td><td>评估规则对齐</td><td>percentage_diff <= 0.2 → AchievedTarget</td></tr>
+</table>
+
+<h3>13.2 集成测试</h3>
+<table>
+<tr><th>测试场景</th><th>测试目标</th><th>预期结果</th></tr>
+<tr><td>单小区求解</td><td>求解器端到端流程</td><td>返回 OptimizationResult，求解时间 < 10ms</td></tr>
+<tr><td>多小区并行</td><td>10 小区并行求解</td><td>总时间 < 100ms</td></tr>
+<tr><td>AgentLoop 集成</td><td>与现有 AgentLoop 集成</td><td>规划→构建→预测→执行 全流程通过</td></tr>
+<tr><td>回滚降级</td><td>求解器故障时回滚</td><td>自动切换到规则方案</td></tr>
+</table>
+
+<h3>13.3 性能测试</h3>
+<table>
+<tr><th>测试项</th><th>基准值</th><th>目标值</th></tr>
+<tr><td>单小区求解时间</td><td>< 10ms</td><td>< 5ms</td></tr>
+<tr><td>100 小区并行求解时间</td><td>< 1s</td><td>< 500ms</td></tr>
+<tr><td>解空间压缩比</td><td>31x</td><td>50x+</td></tr>
+<tr><td>Pareto 前沿完整度</td><td>100%</td><td>100%</td></tr>
+<tr><td>最优性间隙</td><td>0.0000</td><td>0.0000</td></tr>
+</table>
+
+<h3>13.4 正确性验证</h3>
+<div class="summary-box">
+<h4>验证清单</h4>
+<ul>
+<li>[ ] 参数边界动态计算正确，与现有代码一致</li>
+<li>[ ] 策略过滤正确，LTE 返回 BEGBR+DACQ，NR 返回 FWA</li>
+<li>[ ] 解空间压缩正确，初次规划只枚举默认值</li>
+<li>[ ] ε-约束求解返回完整 Pareto 前沿</li>
+<li>[ ] 最优性间隙 = 0.0000（数学证明）</li>
+<li>[ ] 普通用户速率估算值合理</li>
+<li>[ ] 评估结果与现有 20% 阈值规则一致</li>
+<li>[ ] AgentLoop 集成后全流程通过</li>
+<li>[ ] 回滚降级机制正常工作</li>
+</ul>
+</div>
+</div>
+
+<!-- 总结 -->
+<div class="section">
+<h2>总结</h2>
+<h3>核心贡献</h3>
+<ol>
+<li><strong>8 模块架构清晰</strong>：输入层→处理层→输出层，每个模块职责明确</li>
+<li><strong>现有代码完全对齐</strong>：参数边界动态化、策略预过滤、渐进式压缩、评估对齐、普通用户指标获取</li>
+<li><strong>实施路线图明确</strong>：P0/P1/P2 优先级，短期/长期方案，回滚降级策略</li>
+<li><strong>测试验证方案完整</strong>：单元测试、集成测试、性能测试、正确性验证清单</li>
+</ol>
+
+<h3>关键结论</h3>
+<div class="summary-box">
+<p><strong>求解器不是替代现有逻辑，而是增强现有逻辑。</strong></p>
+<p>必须在现有代码的策略选择规则、参数调整规则、评估规则框架内，引入量化求解能力，确保无缝集成。</p>
+<p>预计 1-2 周完成 P0/P1 核心功能，1-2 月完成全部功能。</p>
+</div>
+
+<p style="text-align:center;margin-top:30px;color:#7f8c8d;font-size:12px">
+VIP求解引擎模块架构深度设计 v3.6 | 北冥Evo | 2026-06-09<br>
+核心内容: LLM 智能尝试+专业求解器三层漏斗 + 多目标转单目标数学推导 + 求解算法对比 + 模块架构详细展开 + 现有代码对齐修正 + 实施路线图 + 测试验证方案
+</p>
+</div>
+
+</div>
+</body>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({startOnLoad:true, theme:'default', sequenceDiagram: {actorMargin: 80, width: 200, height: 50}});
+</script>
+</html>
